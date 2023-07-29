@@ -31,6 +31,7 @@ While this plugin is very experimental, I've got it to a point where it actually
 - Networking options such as proxies, force TCP, reconnecting on disconnect etc.
 - Configuration to enable notifications (toasts) for events
 - Anything and everything else I can think of
+- Think of a good name for it
 
 ### To install:
  Make sure to read up on how the [Decky Template Repository](https://github.com/SteamDeckHomebrew/decky-plugin-template) is organized. 
