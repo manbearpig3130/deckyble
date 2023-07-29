@@ -5,10 +5,11 @@ This repository is an attempt to create a Mumble VOIP client built into the Stea
 Pymumble is used in the Python backend to handle Mumble connections.
 
 ## Features:
-- 3 different voice transmit modes: always-on, voice activity. push-to-talk (Kind of works)
+- 3 different voice transmit modes: always-on, voice activity. push-to-talk (Kind of works*)
 - Save servers and connect from the server manager
 - Select any Input or Output devices for audio
-- Text chat
+- Text chat to channels and privately to other users
+- Navigate Channels
 
 ### To install:
 
@@ -37,4 +38,29 @@ On the build machine:
 6. Run `make it` to build and install to your Steam Deck
 7. It works maybe?
 
+### Notes:
 
+* Push-To-Talk is a bit broken because of how Steam takes exclusive control of the Steam Deck Controller. When enabling a PTT button in the SteamOS interface, some buttons and joysticks will stop working until PTT is disabled again.
+* While in-game it should be possible to get button presses from the virtual gamepad, assuming they have been mapped in the Steam Input options. I'm yet to implement this.
+* I know the interface is a bit janky. I basically learned Typescript making this plugin.
+
+
+## Images:
+
+### Connected to a server:
+![Connected to a server](img/server.png)
+
+### Server Browser:
+![Server browser](img/browser.png)
+
+### Chat Window:
+![Chat window](img/chatbox.png)
+
+### Chat Tab:
+![Chat tab](img/chat2.png)
+
+### Server Settings:
+![Server settings](img/serversettings.png)
+
+### Sound Settings:
+![Sound Settings](img/soundsettings.png)
