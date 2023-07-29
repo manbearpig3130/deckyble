@@ -591,14 +591,24 @@ useEffect(() => {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between"}}>
+      <div style={{ flex: 1, margin: "0 15px" }}>
       <APIDropDown/>
+      </div>
+      <div style={{ flex: 1, margin: "0 15px" }}>
       <InputDropDown/>
       </div>
+      </div>
       <div style={{ display: "flex", justifyContent: "space-between"}}>
+      <div style={{ flex: 1, margin: "0 15px" }}>
         <OutputAPIDropDown/>
+        </div>
+        <div style={{ flex: 1, margin: "0 15px" }}>
       <OutputDropDown/>
       </div>
+      </div>
+      <div style={{ flex: 1, margin: "0 15px" }}>
       <TransmitTypeDropdown/>
+      </div>
       {transmitChanged.name === 'activity' && (
         <p>
         <AudioFeedbackBar/>
