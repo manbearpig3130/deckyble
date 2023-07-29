@@ -70,13 +70,46 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
 
   return (
     <div>
-      <TextField label="Address" value={address} onChange={e => setAddress(e.target.value)} />
-      <TextField label="Port" value={port} onChange={e => setPort(e.target.value)} />
-      <TextField label="Username" value={username} onChange={e => setUsername(e.target.value)} />
-      <TextField label="Label" value={label} onChange={e => setLabel(e.target.value)} />
-      <TextField label="Password" value={password} onChange={e => setPassword(e.target.value)} />
-      <ButtonItem onClick={handleSubmit}>Save</ButtonItem>
+  <div style={{ display: "flex"}}>
+    <div style={{ flex: 1, margin: "0 8px" }}>
+      <TextField 
+        label="Address" 
+        value={address} 
+        onChange={e => setAddress(e.target.value)} 
+        style={{ width: "100%" }}
+      />
     </div>
+    <div style={{ flex: 1, margin: "0 8px" }}>
+      <TextField 
+        label="Port" 
+        value={port} 
+        onChange={e => setPort(e.target.value)} 
+        style={{ width: "100%" }}
+      />
+    </div>
+  </div>
+  <div style={{ display: "flex"}}>
+    <div style={{ flex: 1, margin: "0 8px" }}>
+      <TextField 
+        label="Username" 
+        value={username} 
+        onChange={e => setUsername(e.target.value)} 
+        style={{ width: "100%" }}
+      />
+    </div>
+    <div style={{ flex: 1, margin: "0 8px" }}>
+      <TextField 
+        label="Server Name" 
+        value={label} 
+        onChange={e => setLabel(e.target.value)} 
+        style={{ width: "100%" }}
+      />
+    </div>
+  </div>
+  <TextField label="Password" value={password} onChange={e => setPassword(e.target.value)} />
+  <ButtonItem onClick={handleSubmit}>Save</ButtonItem>
+</div>
+
   );
 };
 

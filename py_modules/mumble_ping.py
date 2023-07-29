@@ -27,6 +27,6 @@ def mumble_ping(host, port, verbose=False):
         'version': '.'.join([str(v) for v in r[1:4]]),
         'users': r[5],
         'max_users': r[6],
-        'ping': f"{ping:.1f}ms",
+        'ping': int(ping),
         'bandwidth': f"{r[7] / 1000}kbit/s",
     }
