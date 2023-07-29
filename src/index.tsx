@@ -277,11 +277,18 @@ const DeafToggle: FC = () => {
 const ChannelsAndUsers: FC = () => {
   const { connected, setConnected } = useContext(ConnectionContext);
   const { handleOpenModal, setSelectedRecipient } = useContext(ModalContext);
-  //const { muted } = useContext(MuteContext);
   const { transmittingUsers } = useContext(TransmittingContext);
   const [channels, setChannels] = useState<{[channelName: string]: {users: {[username: string]: {muted: boolean, ID: number}}}}>({});
   const [users, setUsers] = useState<{[username: string]: {muted: boolean}}>({});
-  //const [cupoffart, setCupoffart] = useState(false);
+  const [serverName, setServerName] = useState("General Tergidson")
+
+
+  const getSelectedServer = async () => {
+    console.log("GETTING TERGIDSON NAME: ")
+    const serverNameResponse = await server.callPluginMethod("settings_getSetting", { key: "label", defaults: "Tergidson" }) as PluginMethodResponse<string>
+    setServerName(serverNameResponse.result)
+    console.log("GOT TERGIDSON NAME: ", serverNameResponse.result);
+  }
 
   const fetchChannelsAndUsers = async () => {
     console.log("fetchChannelsAndUsers called");
@@ -342,6 +349,7 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
       //setCupoffart(isconnected.result)
       setConnected(isconnected.result)
       fetchChannelsAndUsers();
+      
     } else {
       setUsers({})
     }
@@ -361,6 +369,7 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
 
   useEffect(() => {
     fetchInitialData();
+    getSelectedServer();
   }, []);
 
   useEffect(() => {
@@ -374,6 +383,7 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
   return (
     
     <div>
+      {connected ? (<div> {"Connected to " + serverName} </div>) : ( <div> {"Server: " + serverName} <br /> {"Not Connected"} </div> )}
     <div>
       {Object.entries(channels).map(([channelName, { users }], channelIndex) => (
         <Fragment key={`channel-${channelIndex}`}>
@@ -489,6 +499,9 @@ const Tab3Component: FC = () => {
   const [pings, setPings] = useState({});
   //const [isConnected, setisConnected] = useState(false)
   const { setConnected } = useContext(ConnectionContext);
+  const [focusedItem, setFocusedItem] = useState<number | null>(null);
+  
+
 
   interface Server{
     address: string;
@@ -567,47 +580,62 @@ const Tab3Component: FC = () => {
   useEffect(() => {
     console.log("Tab3Component Fetussed on the turds.");
     fetchSavedServers();
-    //setisConnected(connected);
-    //setisConnected(connected);
+    console.log("SHART!!! ", focusedItem);
     
-}, []); // Remove servers from dependency array
+}, []);
 
   useEffect(() => {
     console.log("Tab3Component Fetussed.");
     servers.forEach(server => fetchPing(server.address, server.port));
-    
+    console.log("FECES! ",focusedItem);
   }, [servers]);
 
+  const FocusableField = ({ onFocus, ...props }) => {
+    return (
+      <div onFocus={onFocus}>
+        <Field {...props} />
+      </div>
+    );
+  };
+
   return(
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       <PanelSection>
+        <div style={{ 
+          maxHeight: '220px', // adjust as needed
+          overflowY: 'auto', // adds a vertical scrollbar
+          width: '100%', // adjust as needed
+          //padding: '1rem', // adjust as needed
+          textAlign: 'left'
+        }}>
         {servers.map((server, index) => {
           const pingInfo = pings[`${server.address}:${server.port}`] || {};
-          const { ping = 'Loading...', users = 'Loading...', max_users = 'Loading...' } = pingInfo;
-          let pingStyle = { color: 'black' };
+          const { ping = '', users = '', max_users = '' } = pingInfo;
+          let pingStyle = { color: 'black'};
           if (typeof ping === 'number') { // make sure ping is a number
             if (ping < 50) {
-              pingStyle = { color: 'green' };
+              pingStyle = { color: 'green'};
             } else if (ping < 120) {
-              pingStyle = { color: 'orange' };
+              pingStyle = { color: 'orange'};
             } else {
               pingStyle = { color: 'red' };
             }
           }
           return (
-            <PanelSectionRow key={index}>
-              <Field 
+            <PanelSectionRow>
+              <FocusableField onFocus={() => {console.log("CUP OF FOCUS?")}} onClick={(e) => handleServerClick(server.label, e)}  key={index} 
                 label={
-                  <div style={{ padding: '1px' }}>
-                    <strong>Server:</strong> {server.label} - {users}/{max_users} - <span style={pingStyle}>{ping}ms</span>
-                    <p>{server.address}:{server.port}</p> 
-                  </div>
+                  <Fragment >
+                    <div style={{ flex: 0.7, textAlign: 'left' }}>{server.label}: {users}/{max_users}</div> 
+                    <div style={{ flex: 0.3, textAlign: 'right' }}><span style={pingStyle}>{ping}ms</span></div>
+                    </Fragment>
                 } 
-                onClick={(e) => handleServerClick(server.label, e)} 
+                
               />
             </PanelSectionRow>
           );
         })}
+        </div>
       </PanelSection>
       <PanelSection>
         <PanelSectionRow>
