@@ -1,6 +1,6 @@
 # Mumble Steam Deck Plugin
 
-This repository is an attempt to create a Mumble VOIP client built into the Steam Deck interface. Don't browse the code if you're offendded by profanity until I actually start polishing it.
+This repository is an attempt to create a Mumble VOIP client built into the Steam Deck interface. It is a work in progress and is absolutely not guarunteed to be free of bugs or to even work at all. Don't browse the code if you're offendded by profanity until I actually start polishing it.
 
 Pymumble is used in the Python backend to handle Mumble connections.
 
@@ -13,6 +13,7 @@ Pymumble is used in the Python backend to handle Mumble connections.
 ### To install:
 
  Make sure to read up on how the [Decky Template Repository](https://github.com/SteamDeckHomebrew/decky-plugin-template) is organized. 
+ I am assuming you are using a GNU/Linux based OS with a bash terminal. I have no idea how to build this on Windows or Mac, but if you're determined enough, you can figure it out.
 
 The pre-requisites for this to work are:
 -  A Steam Deck with Decky Loader installed
