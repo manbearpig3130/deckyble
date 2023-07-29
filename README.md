@@ -7,6 +7,7 @@ Uses Pymumble in the backend for handling the connection.
 Why do we need a Mumble plugin for the Steam Deck? 
 Well, we don't really. I don't know who will use it when one can use the full Mumble client by launching it as a game in Steam, but it is a bit un-intuitive. 
 This was just an idea I had which made for a great project to hone my Python skills, and to learn Typescript / React. 
+
 While this plugin is very experimental, I've got it to a point where it actually functions as a working, yet minimalistic Mumble client
 
 ## Features:
