@@ -1,18 +1,37 @@
 # Mumble Steam Deck Plugin
 
-This repository is an attempt to create a Mumble VOIP client built into the Steam Deck interface. It is a work in progress and is absolutely not guarunteed to be free of bugs or to even work at all. Don't browse the code if you're offendded by profanity until I actually start polishing it.
+This repository is an attempt to create a Mumble VOIP client built into the Steam Deck interface. It is a work in progress and is absolutely not guarunteed to be free of bugs. Don't browse the code if you're offendded by profanity until I actually start polishing it.
 
-Pymumble is used in the Python backend to handle Mumble connections.
+Uses Pymumble in the backend for handling the connection.
+
+Why do we need a Mumble plugin for the Steam Deck? 
+Well, we don't really. I don't know who will use it when one can use the full Mumble client by launching it as a game in Steam, but it is a bit un-intuitive. 
+This was just an idea I had which made for a great project to hone my Python skills, and to learn Typescript / React. 
+While this plugin is very experimental, I've got it to a point where it actually functions as a working, yet minimalistic Mumble client
 
 ## Features:
-- 3 different voice transmit modes: always-on, voice activity. push-to-talk (Kind of works*)
+- 3 different voice transmit modes: always-on, voice activity (proud of this one), push-to-talk (Kind of works*)
 - Save servers and connect from the server manager
 - Select any Input or Output devices for audio
 - Text chat to channels and privately to other users
 - Navigate Channels
 
-### To install:
+### To do:
+- Server access token support and related admin functions
+- Local volume control of other users
+- Show server and user info
+- User comments
+- Audio quality customization, input compression customization
+- Recording
+- Make the interface generally less shitty
+- Remove all the profanity and nonsense from the code. It's just how I keep things interesting...
+- Enhance push-to-talk
+- Public server browser
+- Networking options such as proxies, force TCP, reconnecting on disconnect etc.
+- Configuration to enable notifications (toasts) for events
+- Anything and everything else I can think of
 
+### To install:
  Make sure to read up on how the [Decky Template Repository](https://github.com/SteamDeckHomebrew/decky-plugin-template) is organized. 
  I am assuming you are using a GNU/Linux based OS with a bash terminal. I have no idea how to build this on Windows or Mac, but if you're determined enough, you can figure it out.
 
@@ -43,6 +62,7 @@ On the build machine:
 * Push-To-Talk is a bit broken because of how Steam takes exclusive control of the Steam Deck Controller. When enabling a PTT button in the SteamOS interface, some buttons and joysticks will stop working until PTT is disabled again.
 * While in-game it should be possible to get button presses from the virtual gamepad, assuming they have been mapped in the Steam Input options. I'm yet to implement this.
 * I know the interface is a bit janky. I basically learned Typescript making this plugin.
+* It might help to set your microphone in Steam settings to "Microphone" instead of "Default"
 
 
 ## Images:
