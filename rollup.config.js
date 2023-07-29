@@ -5,6 +5,8 @@ import replace from '@rollup/plugin-replace';
 import typescript from '@rollup/plugin-typescript';
 import { defineConfig } from 'rollup';
 import importAssets from 'rollup-plugin-import-assets';
+//import SystemJS from 'systemjs';
+
 
 import { name } from "./plugin.json";
 
@@ -32,6 +34,6 @@ export default defineConfig({
       'react-dom': 'SP_REACTDOM',
     },
     format: 'iife',
-    exports: 'default',
+    exports: 'default'
   },
 });

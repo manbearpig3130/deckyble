@@ -1,5 +1,5 @@
 {
-  "name": "decky-plugin-template",
+  "name": "mumble-deck",
   "version": "0.0.1",
   "description": "A template to quickly create decky plugins from scratch, based on TypeScript and webpack",
   "scripts": {
@@ -14,9 +14,10 @@
   "keywords": [
     "decky",
     "plugin",
-    "plugin-template",
     "steam-deck",
-    "deck"
+    "deck",
+    "voip",
+    "mumble"
   ],
   "author": "Jonas Dellinger <jonas@dellinger.dev>",
   "license": "BSD-3-Clause",
@@ -26,6 +27,7 @@
   "homepage": "https://github.com/SteamDeckHomebrew/decky-plugin-template#readme",
   "devDependencies": {
     "@rollup/plugin-commonjs": "^21.1.0",
+    "@rollup/plugin-dynamic-import-vars": "^2.0.3",
     "@rollup/plugin-json": "^4.1.0",
     "@rollup/plugin-node-resolve": "^13.3.0",
     "@rollup/plugin-replace": "^4.0.0",
@@ -39,8 +41,10 @@
     "typescript": "^4.7.4"
   },
   "dependencies": {
-    "decky-frontend-lib": "^3.19.2",
-    "react-icons": "^4.4.0"
+    "decky-frontend-lib": "^3.21.8",
+    "dompurify": "^3.0.5",
+    "react-icons": "^4.4.0",
+    "systemjs": "^6.14.1"
   },
   "pnpm": {
     "peerDependencyRules": {
