@@ -88,15 +88,22 @@ class Plugin:
             self.transmitting = False
         else:
             self.transmitting = True
-        self.connection = self.settings.getSetting("currentServer", None)
-        decky_plugin.logger.info(f"CONNECTION: {self.connection}")
+        
+        ## Set the currently selected server to the last server used, or the first server in the list if there is no last server
+        lastServer = self.settings.getSetting("currentServer", None)
+        decky_plugin.logger.info(f"CONNECTION: {lastServer}")
         decky_plugin.logger.info(f"len saved servers: {len(self.savedServers)}")
-        if self.connection is None and len(self.savedServers) > 0:
+        if lastServer is None and len(self.savedServers) > 0:
             try:
-                self.connection = ServerConnection(**self.savedServers[0])
-                decky_plugin.logger.info(f"CONNECTION: {self.connection}")
+                # self.connection = ServerConnection(**self.savedServers[0])
+                await self.setCurrentServer(self.savedServers[0]['label'])
+                decky_plugin.logger.info(f"CONNECTION SET: {self.connection}")
+                #decky_plugin.logger.info(f"CONNECTION: {self.connection}")
             except Exception as e:
                 decky_plugin.logger.info(f"Failed to load connection: {e}")
+        elif lastServer is not None and len(self.savedServers) > 0:
+            decky_plugin.logger.info(f"CONNECTION FART CUNTS: {lastServer}")
+            await self.setCurrentServer(self, lastServer['label'])
         
         ## Set up the side loop in a separate thread
         self.side_loop = threading.Thread(target=self.sideloop, args=(self,))
@@ -272,7 +279,7 @@ class Plugin:
             return channels_and_users
         else:
             decky_plugin.logger.info(f"No server selected")
-            return await self.get_channels_and_users(self)
+            return False
 
     ## Thread which handles playback of received audio
     @catch_errors
@@ -542,6 +549,7 @@ class Plugin:
                 return self.settings.setSetting("savedServers", self.savedServers)
         self.logger.info(f"saving server: {server}")
         self.savedServers.append(server.to_json())
+        await self.setCurrentServer(self, label)
         return self.settings.setSetting("savedServers", self.savedServers)
     
     @catch_errors

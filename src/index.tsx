@@ -124,8 +124,8 @@ const handleDisconnect = async () => {
 const handleConnect = async () => {
   //const { setConnected } = useContext(ConnectionContext);
    
-  const response = await server.callPluginMethod("connect_server", { }) as PluginMethodResponse<{[channelName: string]: {users: {[username: string]: {muted: boolean, ID: number}}}}>;
-  if (response.success) {
+  const response = await server.callPluginMethod("connect_server", { }) as PluginMethodResponse<{[channelName: string]: {users: {[username: string]: {muted: boolean, ID: number}}}} | boolean>;
+  if (response.success && response.result !== false) {
     server.toaster.toast({
       title: 'Success',
       body: "Connected",
