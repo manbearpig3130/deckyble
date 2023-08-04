@@ -7,6 +7,10 @@ interface MyFormProps {
   serverAPI: ServerAPI;
 }
 
+interface PluginMethodResponse<T> {
+  success: boolean;
+  result: T;
+}
 
 
 const MyForm = ({ serverAPI }: MyFormProps) => {
@@ -25,17 +29,20 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
 
   useEffect(() => {
     const fetchSettings = async () => {
-      const savedAddress = handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "address", defaults: "" }));
-      const savedPort =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "port", defaults: "" }));
-      const savedUsername =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "username", defaults: "" }));
-      const savedLabel =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "label", defaults: "" }));
-      const savedPassword =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "password", defaults: "" }));
+      // const savedAddress = handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "address", defaults: "" }));
+      // const savedPort =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "port", defaults: "" }));
+      // const savedUsername =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "username", defaults: "" }));
+      // const savedLabel =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "label", defaults: "" }));
+      // const savedPassword =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "password", defaults: "" }));
 
-      setAddress(savedAddress);
-      setPort(savedPort);
-      setUsername(savedUsername);
-      setLabel(savedLabel);
-      setPassword(savedPassword);
+      const currentServer = await serverAPI.callPluginMethod("getCurrentServer", {}) as PluginMethodResponse<{host: string, port: string, username: string, password: string, label: string}>;
+      console.log("currentServer", currentServer);
+
+      setAddress(currentServer.result.host);
+      setPort(currentServer.result.port);
+      setUsername(currentServer.result.username);
+      setLabel(currentServer.result.label);
+      setPassword(currentServer.result.password);
     };
     fetchSettings();
   }, [serverAPI]);
@@ -43,13 +50,14 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
   const handleSubmit = async () => {
     let error;
     try {
-      await serverAPI.callPluginMethod("settings_setSetting", { key: "address", value: address });
-      await serverAPI.callPluginMethod("settings_setSetting", { key: "port", value: port });
-      await serverAPI.callPluginMethod("settings_setSetting", { key: "username", value: username });
-      await serverAPI.callPluginMethod("settings_setSetting", { key: "label", value: label });
-      await serverAPI.callPluginMethod("settings_setSetting", { key: "password", value: password });
+      // await serverAPI.callPluginMethod("settings_setSetting", { key: "address", value: address });
+      // await serverAPI.callPluginMethod("settings_setSetting", { key: "port", value: port });
+      // await serverAPI.callPluginMethod("settings_setSetting", { key: "username", value: username });
+      // await serverAPI.callPluginMethod("settings_setSetting", { key: "label", value: label });
+      // await serverAPI.callPluginMethod("settings_setSetting", { key: "password", value: password });
       console.log("terd", { address: address, port: port, username: username, label: label, password: password });
-      await serverAPI.callPluginMethod("saveServer", { address: address, port: port, username: username, label: label, password: password });
+      const arse = await serverAPI.callPluginMethod("saveServer", { address: address, port: port, username: username, label: label, password: password || '' });
+      console.log("arse", arse);
       serverAPI.toaster.toast({
         title: 'Success',
         body: "Settings saved",

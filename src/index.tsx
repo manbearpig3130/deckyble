@@ -285,9 +285,10 @@ const ChannelsAndUsers: FC = () => {
 
   const getSelectedServer = async () => {
     console.log("GETTING TERGIDSON NAME: ")
-    const serverNameResponse = await server.callPluginMethod("settings_getSetting", { key: "label", defaults: "Tergidson" }) as PluginMethodResponse<string>
-    setServerName(serverNameResponse.result)
-    console.log("GOT TERGIDSON NAME: ", serverNameResponse.result);
+    //const serverNameResponse = await server.callPluginMethod("settings_getSetting", { key: "label", defaults: "None selected" }) as PluginMethodResponse<string>
+    const currentServer = await server.callPluginMethod("getCurrentServer", {}) as PluginMethodResponse<{host: string, port: string, username: string, password: string, label: string}>;
+    setServerName(currentServer.result.label)
+    console.log("GOT TERGIDSON NAME: ", currentServer.result.label);
   }
 
   const fetchChannelsAndUsers = async () => {
@@ -504,7 +505,7 @@ const Tab3Component: FC = () => {
 
 
   interface Server{
-    address: string;
+    host: string;
     port: string;
     label: string;
   }
@@ -545,9 +546,24 @@ const Tab3Component: FC = () => {
   
 
   const fetchSavedServers = async () => {
-    const response = await server.callPluginMethod("getServers", {}) as PluginMethodResponse<any>;
-    if (response.success) {
-      setServers(response.result);
+    try {
+      const response = await server.callPluginMethod("getServers", {}) as PluginMethodResponse<any>;
+      console.log(response);
+      console.log(response.result);
+      console.log(response.success);
+      if (response.success) {
+        console.log("SERVERS ARE TERDS!")
+        console.log(response.result);
+        setServers(response.result);
+      }
+      else {
+        console.log("SERVERS ARE NOT TERDS!")
+        console.log(response.result);
+
+      }
+    } catch (e) { 
+      console.log("AAAARSE");
+      console.log(e);
     }
   };
 
@@ -586,11 +602,11 @@ const Tab3Component: FC = () => {
 
   useEffect(() => {
     console.log("Tab3Component Fetussed.");
-    servers.forEach(server => fetchPing(server.address, server.port));
+    servers.forEach(server => fetchPing(server.host, server.port));
     console.log("FECES! ",focusedItem);
   }, [servers]);
 
-  const FocusableField = ({ onFocus, ...props }) => {
+  const FocusableField = ({ onFocus, ...props }: any) => {
     return (
       <div onFocus={onFocus}>
         <Field {...props} />
@@ -609,7 +625,7 @@ const Tab3Component: FC = () => {
           textAlign: 'left'
         }}>
         {servers.map((server, index) => {
-          const pingInfo = pings[`${server.address}:${server.port}`] || {};
+          const pingInfo = pings[`${server.host}:${server.port}`] || {};
           const { ping = '', users = '', max_users = '' } = pingInfo;
           let pingStyle = { color: 'black'};
           if (typeof ping === 'number') { // make sure ping is a number
@@ -623,7 +639,7 @@ const Tab3Component: FC = () => {
           }
           return (
             <PanelSectionRow>
-              <FocusableField onFocus={() => {console.log("CUP OF FOCUS?")}} onClick={(e) => handleServerClick(server.label, e)}  key={index} 
+              <FocusableField onFocus={() => {console.log("CUP OF FOCUS?")}} onClick={(e: any) => handleServerClick(server.label, e)}  key={index} 
                 label={
                   <Fragment >
                     <div style={{ flex: 0.7, textAlign: 'left' }}>{server.label}: {users}/{max_users}</div> 

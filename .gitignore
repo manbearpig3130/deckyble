@@ -48,3 +48,11 @@ backend/out
 
 # Make sure to ignore any instance of the loader's decky_plugin.py
 decky_plugin.py
+shit/
+.jython_cache/
+py_modules/*
+defaults/py_modules
+
+!py_modules/mumble_client.py
+!py_modules/steam_deck_input.py
+!py_modules/helpful_functions.py

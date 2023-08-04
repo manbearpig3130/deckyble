@@ -1,7 +1,23 @@
 import decky_plugin
 from struct import *
-from string import Template
-import socket, sys, time, datetime, numpy
+import socket, sys, time, datetime, numpy, json
+from dataclasses import dataclass, asdict
+
+@dataclass
+class ServerConnection:
+    host: str
+    port: int
+    username: str
+    password: str
+    label: str
+
+    def to_json(self):
+        return asdict(self)
+    
+    @classmethod
+    def from_json(cls, json_string):
+        data = json.loads(json_string)
+        return cls(**data)
 
 def mumble_ping(host, port, verbose=False):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
