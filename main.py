@@ -9,7 +9,7 @@ import numpy
 
 from steam_deck_input import SteamDeckInput
 from mumble_client import CustomMumble
-from mumble_ping import mumble_ping
+from helpful_functions import mumble_ping, mono_to_stereo, catch_errors
 
 
 settingsDir = os.environ["DECKY_PLUGIN_SETTINGS_DIR"]
@@ -40,24 +40,13 @@ async def send_update(websocket, path, thing=None):
 
 class Plugin:
     server_stop_event = asyncio.Event()
-
-    def catch_errors(func):
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                decky_plugin.logger.error(f"Error in {func.__name__}: {e}")
-        return wrapper
-    
-        # Asyncio-compatible long-running code, executed in a task when the plugin is loaded
+    ###########################################################################
+    ##             Special plugin functions, called by Decky                 ##
+    ##                   _main    _unload    _migration                      ##
+    ###########################################################################
+    # Asyncio-compatible long-running code, executed in a task when the plugin is loaded. This is the main entry point for the plugin.
     async def _main(self):
-        #nump = self.import_or_install("numpy")
-        #decky_plugin.logger.info(f"import/install numpy: {nump}")
-        decky_plugin.logger.info(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
-        decky_plugin.logger.info(f"PATH: {os.environ.get('PATH')}")
-        decky_plugin.logger.info(f"Dir: {os.listdir()}")
-        decky_plugin.logger.info(f"CWD: {os.getcwd()}")
-        
+        ## Set up all the class variables
         self.logger = decky_plugin.logger
         self.server_stop_event = asyncio.Event()
         self.clients = {}
@@ -100,9 +89,11 @@ class Plugin:
         else:
             self.transmitting = True
         
+        ## Set up the side loop in a separate thread
         self.side_loop = threading.Thread(target=self.sideloop, args=(self,))
         self.side_loop.start()
-        
+
+        ## Set up the websocket server
         try:
             async with websockets.serve(lambda websocket, path: send_update(websocket, path, thing=self), "localhost", 8765):
                 await Plugin.server_stop_event.wait()
@@ -110,7 +101,38 @@ class Plugin:
             decky_plugin.logger.info("Failed to start websocket server")
             decky_plugin.logger.info(e)
             return
-    
+        
+    # Function called first during the unload process, utilize this to handle your plugin being removed
+    async def _unload(self):
+        decky_plugin.logger.info("Goodbye asshats!")
+        if self.connected:
+            self.leave_server()
+        if self.input_handler is not None:
+            self.input_handler.close()
+            self.input_handler = None
+        self.server_stop_event.set()
+        self.side_loop.join()
+        if self.stream is not None:
+            self.stream.stop()
+        pass
+
+    # Migrations that should be performed before entering `_main()`.
+    async def _migration(self):
+        decky_plugin.logger.info("Migrating")
+        decky_plugin.migrate_logs(os.path.join(decky_plugin.DECKY_USER_HOME,
+                                               ".config", "decky-template", "template.log"))
+        decky_plugin.migrate_settings(
+            os.path.join(decky_plugin.DECKY_HOME, "settings", "template.json"),
+            os.path.join(decky_plugin.DECKY_USER_HOME, ".config", "decky-template"))
+        decky_plugin.migrate_runtime(
+            os.path.join(decky_plugin.DECKY_HOME, "template"),
+            os.path.join(decky_plugin.DECKY_USER_HOME, ".local", "share", "decky-template"))
+        
+    ###########################################################################
+    ##                     Various important functions                       ##
+    ###########################################################################
+    ## sideloop is a loop which is kind of the main loop, but not really.
+    ## It's used to check if the user is transmitting, and to send audio level data when the soudn settings page is open
     @catch_errors
     def sideloop(self):
         decky_plugin.logger.info("STARTED SIDE TERGISON LLOOOOPP")
@@ -142,29 +164,41 @@ class Plugin:
                     if not self.probe:
                         self.logger.info("ALIEN PROBE?")
                         self.open_probing_stream(self)
-            
             time.sleep(0.01)
 
+    ## Sends a message to the websocket server which signals the frontend that it should update/refresh
     @catch_errors
-    async def broadcast_update(self, channel='default', reason='Turds', data=None):
+    async def broadcast_update(self, message=None, channel='default', reason='Turds', data=None, username=None):
         decky_plugin.logger.info(f"TERGID UPDATE?? {channel} - {reason}")
         decky_plugin.logger.info(f"TERGID clients?? {self.clients}")
-        for websocket in self.clients.get(channel, []):
-            try:
-                response = await websocket.send(json.dumps({'type': 'update', 'reason': reason}))
-                decky_plugin.logger.info(f"TERGID RESPONSE?? {response}")
-            except Exception as e:
-                decky_plugin.logger.info("Failed to send update")
-                decky_plugin.logger.info(e)
 
-    @catch_errors
-    async def broadcast_message(self, message, channel='default' ):
-        for websocket in self.clients.get(channel, []):
-            try:
-                await websocket.send(json.dumps({'type': 'message', 'actor': self.mumble.users[message.actor]['name'], 'message': message.message, 'time': str(datetime.datetime.now().strftime("%H:%M:%S"))}))
-            except Exception as e:
-                decky_plugin.logger.info("Failed to send message")
-                decky_plugin.logger.info(e)
+        ## If message is included, it will send the message string to the frontend as well
+        if message is not None:
+            for websocket in self.clients.get(channel, []):
+                try:
+                    await websocket.send(json.dumps({'type': 'message', 'actor': self.mumble.users[message.actor]['name'], 'message': message.message, 'time': str(datetime.datetime.now().strftime("%H:%M:%S"))}))
+                except Exception as e:
+                    decky_plugin.logger.info("Failed to send message")
+                    decky_plugin.logger.info(e)
+        
+        ## If the username is included, update the frontend to say this user is transmitting
+        elif username is not None:
+            decky_plugin.logger.info(f"sending transmission data {username['name']}")
+            for websocket in self.clients.get('default', []):
+                try:
+                    await websocket.send(json.dumps({'type': 'user_transmitting', 'username': username['name']}))
+                except Exception as e:
+                    decky_plugin.logger.error(f"Failed to send update: {e}")
+
+        ## General purpose update
+        else:
+            for websocket in self.clients.get(channel, []):
+                try:
+                    response = await websocket.send(json.dumps({'type': 'update', 'reason': reason}))
+                    decky_plugin.logger.info(f"TERGID RESPONSE?? {response}")
+                except Exception as e:
+                    decky_plugin.logger.info("Failed to send update")
+                    decky_plugin.logger.info(e)
 
     @catch_errors
     async def send_text_message_to_server(self, msg=None):
@@ -178,6 +212,7 @@ class Plugin:
             self.mumble.users[usersession].send_text_message(msg)
             self.messages.append(json.dumps({'type': 'message', 'actor': self.name, 'message': msg, 'time': str(datetime.datetime.now().strftime("%H:%M:%S"))}))
 
+    ## Function for connecting to a server. Uses the details of the 'currently selected' server
     async def connect_server(self):
         if not self.connected:
             decky_plugin.logger.info(f"Connecting to server")
@@ -201,14 +236,14 @@ class Plugin:
                     self.mumble.users.myself.mute()
                 if self.deafened:
                     self.mumble.users.myself.deafen()
-                decky_plugin.logger.info(f"Connected")
+                
                 channels_and_users = await self.get_channels_and_users(self)
                 decky_plugin.logger.info(f"{self.mumble.users}")
                 decky_plugin.logger.info(f"{channels_and_users}")
                 self.connected = True
-                decky_plugin.logger.info("Welcome message:")
-                decky_plugin.logger.info(self.mumble.server_sync_message.welcome_text)
                 self.messages.append(json.dumps({'type': 'message', 'actor': 'Server', 'message': str(self.mumble.server_sync_message.welcome_text), 'time': str(datetime.datetime.now().strftime("%H:%M:%S"))}))
+                
+                ## Set up callbacks to do things when stuff happens
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_SOUNDRECEIVED, partial(self.sound_received_handler, self))
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_USERCREATED, partial(self.user_added_handler, self))
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_USERUPDATED, partial(self.user_updated_handler, self))
@@ -220,8 +255,11 @@ class Plugin:
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_DISCONNECTED, partial(self.disconnected_handler, self))
                 
                 await self.broadcast_update(self, reason="Connected to server")
-
+                decky_plugin.logger.info(f"Connected")
+                decky_plugin.logger.info("Welcome message:")
+                decky_plugin.logger.info(self.mumble.server_sync_message.welcome_text)
                 return channels_and_users
+            
             except Exception as e:
                 decky_plugin.logger.info("Failed to connect to server")
                 decky_plugin.logger.info(e)
@@ -232,6 +270,7 @@ class Plugin:
             channels_and_users = await self.get_channels_and_users(self)
             return channels_and_users
 
+    ## Thread which handles playback of received audio
     @catch_errors
     def audio_playback_thread(self):
         try:
@@ -247,27 +286,151 @@ class Plugin:
         except Exception as e:
             self.logger.info(f"Bad luck tergis {e}")
 
-    def mono_to_stereo(data, channels=2):
-        mono_audio_data = numpy.frombuffer(data, dtype=numpy.int16)  # Convert the data to a NumPy array
-        stereo_array = numpy.vstack((mono_audio_data, mono_audio_data)).T
-        return numpy.ascontiguousarray(stereo_array)
+    ## Function for opening the audio stream
+    @catch_errors
+    def open_audio_stream(self):
+        CHUNK = 1920
+        CHANNELS = 1
+        RATE = 48000
+        frame_duration = CHUNK / RATE
+        MAX_DATA_BYTES = 4000
+        min_level = 175
+        max_level = 500000
 
-    async def send_transmitting_update(self, username):
-        decky_plugin.logger.info(f"sending transmission data {username['name']}")
-        for websocket in self.clients.get('default', []):
+        def input_callback(in_data, frame_count, time_info, status):
+            if self.transmit_mode == 0 and self.connected and not self.muted and self.transmitting:
+                try:
+                    # Directly send raw PCM audio data
+                    self.mumble.sound_output.add_sound(in_data.tobytes())
+                    asyncio.run(self.broadcast_update(self, self.mumble.users.myself))
+                except Exception as e:
+                    decky_plugin.logger.info(f"Failed to send audio: {e}")
+            if self.transmit_mode == 1 and not self.muted and self.transmitting:
+                try:
+                    self.mumble.sound_output.add_sound(in_data.tobytes())
+                    asyncio.run(self.broadcast_update(self, self.mumble.users.myself))
+                except Exception as e:
+                    decky_plugin.logger.info(f"Failed to send audio (PTT MODE): {e}")
+
+            if self.transmit_mode == 2 and not self.muted and self.connected:
+                try:
+                    volume_norm = numpy.linalg.norm(in_data) * 10
+                    volume_norm = numpy.clip(volume_norm, min_level, max_level)
+                    volume_percent = ((volume_norm - min_level) / (max_level - min_level)) * 100
+                    if volume_percent > self.broadcastAfter:
+                        if volume_percent > self.silenceBelow:
+                            decky_plugin.logger.info(f"Sending audio {volume_percent}")
+                            self.mumble.sound_output.add_sound(in_data.tobytes())
+                            asyncio.run(self.broadcast_update(self, self.mumble.users.myself))
+                            self.broadcast_timer = time.time()  # Reset the timer
+                    elif self.broadcast_timer is not None:
+                        if time.time() - self.broadcast_timer > self.BROADCAST_TIMEOUT:
+                            self.broadcast_timer = None  # Stop the timer
+                        else:
+                            # Keep broadcasting until the timer runs out
+                            self.mumble.sound_output.add_sound(in_data.tobytes())
+                            asyncio.run(self.broadcast_update(self, self.mumble.users.myself))
+                    elif volume_percent < self.silenceBelow:
+                        self.broadcast_timer = None  # Stop the timer immediately
+                except Exception as e:
+                    decky_plugin.logger.info(f"Failed to send audio (ACTIVITY MODE): {e}")
+        try:
+            self.stream = sd.InputStream(
+                            channels=CHANNELS,
+                            samplerate=RATE,
+                            device=self.selected_input_device,
+                            blocksize=CHUNK,
+                            dtype='int16',
+                            callback=input_callback)
+            
+            self.stream.start()
+            self.playback_thread = threading.Thread(target=self.audio_playback_thread, args=(self,))
+            self.playback_thread.start()
+            self.logger.info("Started Audio")
+        except Exception as e:
+            self.logger.info(e)
+
+    ## Opens the probing stream. This is the audio stream which is used to check the audio level when the sound settings page is open
+    @catch_errors
+    def open_probing_stream(self):
+        if True:
+            self.logger.info("PROBE NOT CONNECTED FART")
+            def probe_callback(in_data, frame_count, time_info, status):
+                min_level = 175
+                max_level = 500000
+                self.volume_norm = numpy.linalg.norm(in_data) * 10
+                self.volume_norm = numpy.clip(self.volume_norm, min_level, max_level)
+                self.volume_percent = ((self.volume_norm - min_level) / (max_level - min_level)) * 100
+                asyncio.run(self.check_audio_level(self))
             try:
-                await websocket.send(json.dumps({'type': 'user_transmitting', 'username': username['name']}))
+                decky_plugin.logger.info("STARTING PROBER?! ")
+                self.probe = sd.InputStream(channels=1, samplerate=48000, device=self.selected_input_device, blocksize=1920, dtype='int16', callback=probe_callback)
+                self.probe.start()
+                self.probing = True
+                decky_plugin.logger.info(f"STARTed PROBER?! {self.probing}, {self.probe}")
             except Exception as e:
-                decky_plugin.logger.error(f"Failed to send update: {e}")
+                self.logger.info(e)
+    
+    @catch_errors
+    async def check_audio_level(self):
+        if 'audio_level' in self.clients:
+            if len(self.clients['audio_level']) > 0:
+                for websocket in self.clients.get('audio_level', []):
+                    await websocket.send(json.dumps({'type': 'audio_level_update', 'data': int(self.volume_percent)}))
 
+    @catch_errors
+    async def leave_server(self):
+        decky_plugin.logger.info(f"leaving server")
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self.mumble.stop)
+            decky_plugin.logger.info(f"Left Server?")
+            await self.broadcast_update(self)
+            users=[]
+            self.connected = False
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_SOUNDRECEIVED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELCREATED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELUPDATED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELREMOVED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_USERCREATED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_USERUPDATED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_USERREMOVED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_DISCONNECTED)
+            #await self.broadcast_update(self)
+            self.stream.stop()
+            self.audio_queue.put(None)
+            self.playback_thread.join()
+            return users
+        except Exception as e:
+            decky_plugin.logger.info(f"fucked")
+            decky_plugin.logger.info(e)
+            return False
+        
+    async def move_to_channel(self, channelName):
+        decky_plugin.logger.info(f"Moving to channel {channelName}")
+        try:
+            c = self.get_channel_by_name(self, channelName)
+            c.move_in()
+            await self.broadcast_update(self)
+            return True
+        except Exception as e:
+            decky_plugin.logger.info(f"Turgidson?")
+            decky_plugin.logger.info(e)
+
+
+    ###########################################################################
+    ##                Functions for handling Mumble Callbacks                ##
+    ###########################################################################
+    ## When sound is received, this function is called. It adds the sound to the queue for playback by the audio_playback_thread
     @catch_errors
     def sound_received_handler(self, user, soundchunk):
         decky_plugin.logger.info(f"Sound received {user}")
         try:
             if not self.deafened:
-                asyncio.run(self.send_transmitting_update(self, user))
+                asyncio.run(self.broadcast_update(self, user))
                 device_info = sd.query_devices(self.selected_output_device, 'output')
-                stereo_data = self.mono_to_stereo(soundchunk.pcm)
+                stereo_data = mono_to_stereo(soundchunk.pcm)
                 self.audio_queue.put(stereo_data)
 
         except Exception as e:
@@ -290,7 +453,6 @@ class Plugin:
             asyncio.run(self.leave_server(self))
         asyncio.run(self.broadcast_update(self, reason="User removed"))
 
-
     def channel_added_handler(self, channel):
         decky_plugin.logger.info(f"channel added: {channel}")
         asyncio.run(self.broadcast_update(self, reason="Channel added"))
@@ -303,117 +465,22 @@ class Plugin:
         decky_plugin.logger.info(f"channel removed: {channel}")
         asyncio.run(self.broadcast_update(self, reason="Channel removed"))
     
-    @catch_errors
     def message_received_handler(self, message):
         decky_plugin.logger.info(f"Received message: {message}")
         self.messages.append(json.dumps({'type': 'message', 'actor': self.mumble.users[message.actor]['name'], 'message': message.message, 'time': str(datetime.datetime.now().strftime("%H:%M:%S"))}))
         decky_plugin.logger.info(f"messages array: {self.messages}")
-        asyncio.run(self.broadcast_message(self, message))
+        asyncio.run(self.broadcast_update(self, message=message))
 
-    @catch_errors
     def disconnected_handler(self):
         decky_plugin.logger.info(f"Disconnected from server")
         asyncio.run(self.broadcast_update(self))
         asyncio.run(self.leave_server(self))
 
-    @catch_errors
-    def open_audio_stream(self):
-        CHUNK = 1920
-        CHANNELS = 1
-        RATE = 48000
-        frame_duration = CHUNK / RATE
-        MAX_DATA_BYTES = 4000
-        min_level = 175
-        max_level = 500000
 
-        def input_callback(in_data, frame_count, time_info, status):
-            if self.transmit_mode == 0 and self.connected and not self.muted and self.transmitting:
-                try:
-                    # Directly send raw PCM audio data
-                    self.mumble.sound_output.add_sound(in_data.tobytes())
-                    asyncio.run(self.send_transmitting_update(self, self.mumble.users.myself))
-                except Exception as e:
-                    decky_plugin.logger.info(f"Failed to send audio: {e}")
-            if self.transmit_mode == 1 and not self.muted and self.transmitting:
-                try:
-                    self.mumble.sound_output.add_sound(in_data.tobytes())
-                    asyncio.run(self.send_transmitting_update(self, self.mumble.users.myself))
-                except Exception as e:
-                    decky_plugin.logger.info(f"Failed to send audio (PTT MODE): {e}")
-
-            if self.transmit_mode == 2 and not self.muted and self.connected:
-                try:
-                    volume_norm = numpy.linalg.norm(in_data) * 10
-                    volume_norm = numpy.clip(volume_norm, min_level, max_level)
-                    volume_percent = ((volume_norm - min_level) / (max_level - min_level)) * 100
-                    if volume_percent > self.broadcastAfter:
-                        if volume_percent > self.silenceBelow:
-                            decky_plugin.logger.info(f"Sending audio {volume_percent}")
-                            self.mumble.sound_output.add_sound(in_data.tobytes())
-                            asyncio.run(self.send_transmitting_update(self, self.mumble.users.myself))
-                            self.broadcast_timer = time.time()  # Reset the timer
-                    elif self.broadcast_timer is not None:
-                        if time.time() - self.broadcast_timer > self.BROADCAST_TIMEOUT:
-                            self.broadcast_timer = None  # Stop the timer
-                        else:
-                            # Keep broadcasting until the timer runs out
-                            self.mumble.sound_output.add_sound(in_data.tobytes())
-                            asyncio.run(self.send_transmitting_update(self, self.mumble.users.myself))
-                    elif volume_percent < self.silenceBelow:
-                        self.broadcast_timer = None  # Stop the timer immediately
-                except Exception as e:
-                    decky_plugin.logger.info(f"Failed to send audio (ACTIVITY MODE): {e}")
-
-        
-        try:
-            self.stream = sd.InputStream(
-                            channels=CHANNELS,
-                            samplerate=RATE,
-                            device=self.selected_input_device,
-                            blocksize=CHUNK,
-                            dtype='int16',
-                            callback=input_callback)
-            
-            self.stream.start()
-            self.playback_thread = threading.Thread(target=self.audio_playback_thread, args=(self,))
-            self.playback_thread.start()
-            self.logger.info("Started Audio")
-        except Exception as e:
-            self.logger.info(e)
-
-    @catch_errors
-    def open_probing_stream(self):
-        if True:
-            self.logger.info("PROBE NOT CONNECTED FART")
-            def probe_callback(in_data, frame_count, time_info, status):
-                min_level = 175
-                max_level = 500000
-                #self.volume_norm = np.linalg.norm(in_data) * 10
-                self.volume_norm = numpy.linalg.norm(in_data) * 10
-                self.volume_norm = numpy.clip(self.volume_norm, min_level, max_level)
-                self.volume_percent = ((self.volume_norm - min_level) / (max_level - min_level)) * 100
-                #decky_plugin.logger.info(f"SOUND!  {self.volume_norm} | {self.volume_percent}")
-                asyncio.run(self.check_audio_level(self))
-                #decky_plugin.logger.info(f"FISH TERGIDSON!{type(in_data)} {frame_count} {time_info} {status}, {in_data}")
-
-            try:
-                decky_plugin.logger.info("STARTING PROBER?! ")
-                self.probe = sd.InputStream(channels=1, samplerate=48000, device=self.selected_input_device, blocksize=1920, dtype='int16', callback=probe_callback)
-                self.probe.start()
-                self.probing = True
-                decky_plugin.logger.info(f"STARTed PROBER?! {self.probing}, {self.probe}")
-            except Exception as e:
-                self.logger.info(e)
-    
-    @catch_errors
-    async def check_audio_level(self):
-        if 'audio_level' in self.clients:
-            if len(self.clients['audio_level']) > 0:
-                for websocket in self.clients.get('audio_level', []):
-                #await self.broadcast_update(self, reason='audio_level_update', data=self.volume_norm)
-                    #decky_plugin.logger.info(f"ASS FETUS ON FIRE {int(self.volume_norm)}")
-                    response = await websocket.send(json.dumps({'type': 'audio_level_update', 'data': int(self.volume_percent)}))
-                    
+    ###########################################################################
+    ##                      Getter and Setter functions                      ##
+    ##                Most of these are called by the frontend               ##
+    ###########################################################################                    
     async def get_default_input(self):
         return {"ID": self.p.get_default_input_device_info()["index"], "name": self.p.get_default_input_device_info()["name"]}
 
@@ -454,15 +521,12 @@ class Plugin:
         return self.settings.commit()
     
     async def settings_getSetting(self, key: str, defaults):
-        #decky_plugin.logger.info('Get {}'.format(key))
         return self.settings.getSetting(key, defaults)
     
-
     async def settings_setSetting(self, key: str, value):
        decky_plugin.logger.info(f"trying to fart: {key}, {value}")
        return self.settings.setSetting(key, value)
     
-    @catch_errors
     async def saveServer(self, address, port, username, label, password):
         server = { 'address': address, 'port': port, 'username': username, 'label': label, 'password': password }
         for i in self.savedServers:
@@ -479,13 +543,11 @@ class Plugin:
         decky_plugin.logger.info(f"Get servers: {self.savedServers}")
         return self.savedServers
     
-    @catch_errors
     async def pingServer(self, ip, port):
         ping = mumble_ping(str(ip), int(port))
         self.logger.info(f"ping: {str(ping)}")
         return ping
     
-    @catch_errors
     async def deleteServer(self, serverLabel):
         decky_plugin.logger.info(f"Removing server: {serverLabel}")
         for i in self.savedServers:
@@ -494,7 +556,6 @@ class Plugin:
                 return True
         return False
     
-    @catch_errors
     async def setCurrentServer(self, serverLabel):
         self.logger.info("Setting current server details")
         for i in self.savedServers:
@@ -519,39 +580,6 @@ class Plugin:
                 return True
         return False
 
-
-
-    @catch_errors
-    async def leave_server(self):
-        decky_plugin.logger.info(f"leaving server")
-        try:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, self.mumble.stop)
-            decky_plugin.logger.info(f"Left Server?")
-            await self.broadcast_update(self)
-            users=[]
-            self.connected = False
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_SOUNDRECEIVED)
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELCREATED)
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELUPDATED)
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELREMOVED)
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_USERCREATED)
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_USERUPDATED)
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_USERREMOVED)
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED)
-            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_DISCONNECTED)
-            #await self.broadcast_update(self)
-            # self.outstream.stop()
-            self.stream.stop()
-            self.audio_queue.put(None)
-            self.playback_thread.join()
-            #self.p.terminate()
-            return users
-        except Exception as e:
-            decky_plugin.logger.info(f"fucked")
-            decky_plugin.logger.info(e)
-            return False
-    
     async def mute(self):
         decky_plugin.logger.info(f"Muting self")
         
@@ -637,14 +665,10 @@ class Plugin:
                         "muted": self.check_user_muted(self, user),
                         "ID": user['session']
                     }
-            #decky_plugin.logger.info(f"Channels and users: {channels_and_users}")
             return channels_and_users
         else:
             return {}
             
-
-        
-
     async def getConnected(self):
         return self.connected
     
@@ -657,7 +681,6 @@ class Plugin:
     async def getUsername(self):
         return self.name
     
-    @catch_errors
     async def getMessagesArray(self):
         self.logger.info(self.messages)
         return self.messages
@@ -667,110 +690,63 @@ class Plugin:
             return user['self_mute']
         else:
             return False
-    
-    def get_by_name(self, username):
-        for user in self.mumble.users.values():
-            if user['name'] == username:
-                return user
-    
-    async def move_to_channel(self, channelName):
-        decky_plugin.logger.info(f"Moving to channel {channelName}")
-        try:
-            c = self.get_channel_by_name(self, channelName)
-            c.move_in()
-            await self.broadcast_update(self)
-            return True
-        except Exception as e:
-            decky_plugin.logger.info(f"Turgidson?")
-            decky_plugin.logger.info(e)
 
-    @catch_errors
     async def get_selected_recipient(self):
         decky_plugin.logger.info(f"Eatign a turd")
         return self.selected_recipient
     
-    @catch_errors
     async def set_selected_recipient(self, ID=int, name=str):
         decky_plugin.logger.info(f"Eatign a cup of , {ID}, {name}")
         self.selected_recipient = { 'ID': ID, 'name': name }
         return True
 
-
-
-
-    # Function called first during the unload process, utilize this to handle your plugin being removed
-    async def _unload(self):
-        decky_plugin.logger.info("Goodbye asshats!")
-        if self.connected:
-            self.leave_server()
-        if self.input_handler is not None:
-            self.input_handler.close()
-            self.input_handler = None
-        self.server_stop_event.set()
-        self.side_loop.join()
-        #self.stream_thread.join()
-        # self.outstream.stop()
-        if self.stream is not None:
-            self.stream.stop()
-        #self.p.terminate
-        pass
-
-    @catch_errors
     async def setBroadcastAfter(self, value=int):
         try:
             self.broadcastAfter = value
             decky_plugin.logger.info(value)
             self.settings.setSetting("broadcastAfter", value)
             for websocket in self.clients.get('audio_level', []):
-                response = await websocket.send(json.dumps({'type': 'broadcastAfter_update', 'value': value }))
-
+                await websocket.send(json.dumps({'type': 'broadcastAfter_update', 'value': value }))
             return True
         except Exception as e:
             return False
     
-    @catch_errors
     async def getbroadcastAfter(self):
         return self.broadcastAfter
     
-    @catch_errors
     async def setTransmitting(self, value=True):
         self.transmitting = value
         return self.transmitting
     
-    @catch_errors
     async def setsilenceBelow(self, value=int):
         try:
             self.silenceBelow = value
             decky_plugin.logger.info(value)
             self.settings.setSetting("silenceBelow", value)
             for websocket in self.clients.get('audio_level', []):
-                response = await websocket.send(json.dumps({'type': 'silenceBelow_update', 'value': value }))
+                await websocket.send(json.dumps({'type': 'silenceBelow_update', 'value': value }))
 
             return True
         except Exception as e:
             return False
     
-    @catch_errors
     async def getTimeout(self):
         return self.BROADCAST_TIMEOUT
     
-    @catch_errors
     async def setTimeout(self, value=int):
         try:
             self.BROADCAST_TIMEOUT = value
             decky_plugin.logger.info(value)
             self.settings.setSetting("BROADCAST_TIMEOUT", value)
             for websocket in self.clients.get('audio_level', []):
-                response = await websocket.send(json.dumps({'type': 'timeout_update', 'value': value }))
+                await websocket.send(json.dumps({'type': 'timeout_update', 'value': value }))
             return True
         except Exception as e:
             return False
     
-    @catch_errors
     async def getsilenceBelow(self):
         return self.silenceBelow
     
-    @catch_errors
     async def setInputDevice(self, device=int):
         try:
             self.selected_input_device = device
@@ -785,7 +761,6 @@ class Plugin:
             decky_plugin.logger.info(f"Error setting input device: {e}")
             return False
 
-    @catch_errors
     async def setOutputDevice(self, device=int):
         try:
             self.selected_output_device = device
@@ -795,7 +770,6 @@ class Plugin:
             decky_plugin.logger.info(f"Error setting output device: {e}")
             return False
         
-    @catch_errors
     async def setAPI(self, api=int):
         try:
             self.selected_api_input = self.apis[api]
@@ -806,27 +780,22 @@ class Plugin:
             decky_plugin.logger.info(f"Error setting API device: {e}")
             return False
         
-    @catch_errors
     async def setAPI_output(self, api=int):
         try:
             self.selected_api_output = self.apis[api]
             self.selected_api_output['index'] = api
-            #decky_plugin.logger.info(f"Selected OUTPUT API: {self.selected_api_output}")
             return True
         except Exception as e:
             decky_plugin.logger.info(f"Error setting API device: {e}")
             return False
     
-    @catch_errors
     async def get_api(self):
-        #decky_plugin.logger.info(f"The Selected API FETUS is: {self.selected_api_input}")
         for index, i in enumerate(self.apis):
             if i['name'] == self.selected_api_input['name']:
                 turdname = i['name']
                 turddex = index
         return {'ID': turddex, 'name': turdname}
     
-    @catch_errors
     async def get_api_output(self):
         decky_plugin.logger.info(f"The Selected API FETUS is: {self.selected_api_output}")
         for index, i in enumerate(self.apis):
@@ -835,13 +804,19 @@ class Plugin:
                 turddex = index
         return {'ID': turddex, 'name': turdname}
     
+    async def get_apis(self):
+        try:
+            formatted_input_apis = [{'ID': index, 'name': api['name'] } for index, api in enumerate(self.apis)]
+            return formatted_input_apis
+        except Exception as e:
+            decky_plugin.logger.info(f"CUPPA MCFUCKED {e}")
+    
     def get_channel_by_name(self, channel_name):
         for channel in self.mumble.channels:
             if self.mumble.channels[channel]["name"] == channel_name:
                 return self.mumble.channels[channel]
         return None
     
-    @catch_errors
     async def setPushToTalkKey(self, key="R5"):
         try:
             self.ptt_key = key
@@ -923,7 +898,6 @@ class Plugin:
     async def getPTTEnabled(self):
         return self.ptt_enabled
 
-    
     async def get_input_devices(self):
         decky_plugin.logger.info(f"The inlist is here: {len(self.inlist)}")
         newlist = []
@@ -934,15 +908,6 @@ class Plugin:
         decky_plugin.logger.info(f"formatted_input_devices TERDS: {formatted_input_devices}")
         return formatted_input_devices
     
-    @catch_errors
-    async def get_apis(self):
-        try:
-            formatted_input_apis = [{'ID': index, 'name': api['name'] } for index, api in enumerate(self.apis)]
-            return formatted_input_apis
-        except Exception as e:
-            decky_plugin.logger.info(f"CUPPA MCFUCKED {e}")
-        
-    
     async def get_output_devices(self):
         newlist = []
         for i in self.outlist:
@@ -951,7 +916,6 @@ class Plugin:
         formatted_output_devices = [{'ID': device['index'], 'name': device['name']} for index, device in enumerate(newlist)]
         return formatted_output_devices
     
-    @catch_errors
     async def get_selected_output(self):
         decky_plugin.logger.info(f"The Selected OUTPUT FETUS is: {self.selected_output_device}")
         for i in self.outlist:
@@ -959,7 +923,6 @@ class Plugin:
                 turdname = i['name']
         return {'ID': self.selected_output_device, 'name': turdname}
     
-    @catch_errors
     async def get_selected_input(self):
         decky_plugin.logger.info(f"The Selected INPUT TERGINOOS is: {self.selected_input_device}")
         
@@ -968,15 +931,3 @@ class Plugin:
                 turdname = i['name']
         decky_plugin.logger.info({'ID': self.selected_input_device, 'name': turdname})
         return {'ID': self.selected_input_device, 'name': turdname}
-
-    # Migrations that should be performed before entering `_main()`.
-    async def _migration(self):
-        decky_plugin.logger.info("Migrating")
-        decky_plugin.migrate_logs(os.path.join(decky_plugin.DECKY_USER_HOME,
-                                               ".config", "decky-template", "template.log"))
-        decky_plugin.migrate_settings(
-            os.path.join(decky_plugin.DECKY_HOME, "settings", "template.json"),
-            os.path.join(decky_plugin.DECKY_USER_HOME, ".config", "decky-template"))
-        decky_plugin.migrate_runtime(
-            os.path.join(decky_plugin.DECKY_HOME, "template"),
-            os.path.join(decky_plugin.DECKY_USER_HOME, ".local", "share", "decky-template"))
