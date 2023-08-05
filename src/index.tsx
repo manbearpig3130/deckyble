@@ -11,7 +11,11 @@ import {
   staticClasses,
   Field,
   Tabs,
-  ToggleField
+  ToggleField,
+  ShowModalProps,
+  showModal,
+  ModalRoot,
+  SliderField
 } from "decky-frontend-lib";
 
 
@@ -279,22 +283,102 @@ const ChannelsAndUsers: FC = () => {
   const { handleOpenModal, setSelectedRecipient } = useContext(ModalContext);
   const { transmittingUsers } = useContext(TransmittingContext);
   const [channels, setChannels] = useState<{[channelName: string]: {users: {[username: string]: {muted: boolean, ID: number}}}}>({});
-  const [users, setUsers] = useState<{[username: string]: {muted: boolean}}>({});
-  const [serverName, setServerName] = useState("General Tergidson")
+  const [users, setUsers] = useState<{[username: string]: {muted: boolean, volume: number}}>({});
+  const [serverName, setServerName] = useState("General Tergidson");
+  const [mutedUsers, setMutedUsers] = useState<String[]>([]);
+  const [closeModal, setCloseModal] = useState<(() => void) | null>(null);
 
 
   const getSelectedServer = async () => {
     console.log("GETTING TERGIDSON NAME: ")
-    //const serverNameResponse = await server.callPluginMethod("settings_getSetting", { key: "label", defaults: "None selected" }) as PluginMethodResponse<string>
     const currentServer = await server.callPluginMethod("getCurrentServer", {}) as PluginMethodResponse<{host: string, port: string, username: string, password: string, label: string}>;
     setServerName(currentServer.result.label)
     console.log("GOT TERGIDSON NAME: ", currentServer.result.label);
   }
 
+  
+
+  const VolumeModal: FC<{ closeModal: () => void, serverAPI: ServerAPI, userName: string }> = ({ closeModal, serverAPI, userName }) => {
+    const [volume, setVolume] = useState(0);
+
+    const handleVolumeChange = async (username: string, volume: number) => {
+      setVolume(volume);
+      const r = await serverAPI.callPluginMethod("setUserVolume", { user: username, volume: volume }) as PluginMethodResponse<number>;
+      console.log("ASS FACE TERGID VOLS: " + r.result);
+    };
+
+    const getUserVolume = async () => {
+      const response = await serverAPI.callPluginMethod("getUserVolume", { user: userName }) as PluginMethodResponse<number>;
+      console.log("RETARDED TERGIS", response.result)
+      if (response.success) {
+        setVolume(response.result);
+      }
+    };
+
+    useEffect(() => {
+      getUserVolume();
+    }, []);
+
+    useEffect(() => {
+      //getUserVolume();
+      console.log("Volume changed");
+    }, [volume]);
+
+    return (
+      <ModalRoot closeModal={closeModal}>
+
+    <div>
+      <SliderField 
+        label={"Local Volume " + userName + ":  " + volume + "%"}
+        value={volume}
+        min={0}
+        max={150}
+        onChange={(value) => handleVolumeChange(userName, value)}
+        />
+    </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <ButtonItem onClick={closeModal}>Close</ButtonItem>
+        </div>
+      </ModalRoot>
+    );
+  };
+
+  const handleOpenUserVolumeAdjust = async (event: any, userName: string) => {
+    console.log("CUP OF VOLUIME?");
+    const modalProps: ShowModalProps = {
+      strTitle: 'Volume Modal',
+      bHideMainWindowForPopouts: false,
+      fnOnClose: () => console.log("Modal closed")
+  };
+  const modalResult = showModal(<VolumeModal serverAPI={server} userName={userName} closeModal={() => closeModal?.()} />, undefined, modalProps);
+  setCloseModal(() => modalResult.Close);
+  };
+
+
+  const handleMuteUser = async (event: any, userName: string) => {
+    try {
+      const isMuted = mutedUsers.includes(userName);
+      if (isMuted) {
+      const unmuteUserResponse = await server.callPluginMethod("unmute_user", { userName }) as PluginMethodResponse<String[]>;
+      setMutedUsers(unmuteUserResponse.result);
+      console.log("Unmuted Users: ", unmuteUserResponse.result, event);
+      } else {
+      const muteUserResponse = await server.callPluginMethod("mute_user", { userName }) as PluginMethodResponse<String[]>;
+      setMutedUsers(muteUserResponse.result);
+      console.log("Muted Users: ", muteUserResponse.result, event);
+      }
+    }
+    catch (e) {
+      console.log("Mute user failed");
+      console.log(e);
+    }
+  }
+
   const fetchChannelsAndUsers = async () => {
     console.log("fetchChannelsAndUsers called");
     const isconnected = await server.callPluginMethod("getConnected", {}) as PluginMethodResponse<boolean>;
-    const response = await server.callPluginMethod("get_channels_and_users", {}) as PluginMethodResponse<{[channelName: string]: {users: {[username: string]: {muted: boolean, ID: number}}}}>;
+    const response = await server.callPluginMethod("get_channels_and_users", {}) as PluginMethodResponse<{[channelName: string]: {users: {[username: string]: {muted: boolean, ID: number, volume: number}}}}>;
     console.log(response.result, response.success)
     if (response.success) {
       console.log("Received channels data:", response.result);
@@ -318,10 +402,12 @@ const ChannelsAndUsers: FC = () => {
 const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
   
   console.log('Modal context:', handleOpenModal);
+  const isMuted = mutedUsers.includes(userName);
   
   return (
     <Menu label={userName}>
-      <MenuItem onClick={() => console.log(`Mute user: ${userName}`)}>Local Mute</MenuItem>
+      <MenuItem onClick={(e) => handleMuteUser(e, userName)}>{isMuted ? 'Unmute User' : 'Local Mute'}</MenuItem>
+      <MenuItem onClick={(e) => handleOpenUserVolumeAdjust(e, userName)}>{'Volume Adjustment'}</MenuItem>
       <MenuItem onClick={async () => {
         console.log("TRYING MODAL FART");
         console.log("handleOpenModal function: ", handleOpenModal);
@@ -345,6 +431,7 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
 
   const fetchInitialData = async () => {
     const isconnected = await server.callPluginMethod("getConnected", {}) as PluginMethodResponse<boolean>;
+    const mutedUsersResponse = await server.callPluginMethod("get_muted_users", {}) as PluginMethodResponse<String[]>;
     if (isconnected.result){
       console.log("Fetching initial channels and users");
       //setCupoffart(isconnected.result)
@@ -353,6 +440,10 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
       
     } else {
       setUsers({})
+    }
+    if (mutedUsersResponse.success) {
+      setMutedUsers(mutedUsersResponse.result);
+      console.log("Muted Users: ", mutedUsersResponse.result);
     }
   }
   const fetchconnected = async () => {
@@ -394,21 +485,24 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
           {Object.entries(users).map(([username, user], userIndex) => (
             <PanelSectionRow>
               <div style={{ paddingLeft: '20px' }}>
-                {user.muted ? (
-                  <Field 
-                  onClick={(e) => handleUserClick(username, user.ID, e)}
-                  label={<span style={{ color: "red" }}>{username}</span>} 
-                />
-                ) : (
-                  transmittingUsers.includes(username) ? (
-                    <Field 
-                      onClick={(e) => handleUserClick(username, user.ID, e)}
-                      label={<span style={{ color: "green" }}>{username}</span>} 
-                    />
-                  ) : (
-                  <Field label={username} key={`user-${userIndex}`} onClick={(e) => handleUserClick(username, user.ID, e)} />
-                )
-                )}
+              <Field 
+                onClick={(e) => handleUserClick(username, user.ID, e)}
+                label={
+                  <span 
+                    style={{ 
+                      color: mutedUsers.includes(username) 
+                        ? 'darkred' 
+                        : user.muted 
+                          ? 'red'
+                          : transmittingUsers.includes(username) 
+                            ? 'green' 
+                            : 'white'
+                    }}>
+                    {username}
+                  </span>
+                } 
+                key={`user-${userIndex}`}
+              />
               </div>
             </PanelSectionRow>
             

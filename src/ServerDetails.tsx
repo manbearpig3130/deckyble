@@ -20,21 +20,8 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
   const [label, setLabel] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleResponse = (response: any) => {
-    if (response.result !== 'error') {
-      return response.result;
-    }
-    return '';
-  };
-
   useEffect(() => {
     const fetchSettings = async () => {
-      // const savedAddress = handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "address", defaults: "" }));
-      // const savedPort =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "port", defaults: "" }));
-      // const savedUsername =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "username", defaults: "" }));
-      // const savedLabel =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "label", defaults: "" }));
-      // const savedPassword =  handleResponse(await serverAPI.callPluginMethod("settings_getSetting", { key: "password", defaults: "" }));
-
       const currentServer = await serverAPI.callPluginMethod("getCurrentServer", {}) as PluginMethodResponse<{host: string, port: string, username: string, password: string, label: string}>;
       console.log("currentServer", currentServer);
 
@@ -50,11 +37,6 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
   const handleSubmit = async () => {
     let error;
     try {
-      // await serverAPI.callPluginMethod("settings_setSetting", { key: "address", value: address });
-      // await serverAPI.callPluginMethod("settings_setSetting", { key: "port", value: port });
-      // await serverAPI.callPluginMethod("settings_setSetting", { key: "username", value: username });
-      // await serverAPI.callPluginMethod("settings_setSetting", { key: "label", value: label });
-      // await serverAPI.callPluginMethod("settings_setSetting", { key: "password", value: password });
       console.log("terd", { address: address, port: port, username: username, label: label, password: password });
       const arse = await serverAPI.callPluginMethod("saveServer", { address: address, port: port, username: username, label: label, password: password || '' });
       console.log("arse", arse);

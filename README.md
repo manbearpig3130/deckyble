@@ -18,10 +18,10 @@ Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also 
 - Select any Input or Output devices for audio
 - Text chat to channels and privately to other users
 - Navigate Channels
+- Local volume adjustment for each user
 
 ### To do:
 - Server access token support and related admin functions
-- Local volume control of other users
 - Show server and user info
 - User comments
 - Audio quality customization, input compression customization

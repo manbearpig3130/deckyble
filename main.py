@@ -50,6 +50,7 @@ class Plugin:
         self.logger = decky_plugin.logger
         self.server_stop_event = asyncio.Event()
         self.clients = {}
+        self.muted_users = []
         self.settings = SettingsManager(name='settings', settings_directory=settingsDir)
         self.settings.read()
         self.mumble = None
@@ -123,6 +124,7 @@ class Plugin:
         decky_plugin.logger.info("Goodbye asshats!")
         if self.connected:
             self.leave_server()
+            self.muted_users = []
         if self.input_handler is not None:
             self.input_handler.close()
             self.input_handler = None
@@ -244,6 +246,9 @@ class Plugin:
                     self.mumble.users.myself.mute()
                 if self.deafened:
                     self.mumble.users.myself.deafen()
+
+                for u in self.mumble.users:
+                    self.mumble.users[u]['volume'] = 100
                 
                 channels_and_users = await self.get_channels_and_users(self)
                 decky_plugin.logger.info(f"{self.mumble.users}")
@@ -290,10 +295,15 @@ class Plugin:
             self.logger.info(f"Tergis fart {self.selected_input_device}, {output_sample_rate}")
             with sd.OutputStream(samplerate=48000, device=self.selected_output_device, dtype=numpy.int16, channels=2, blocksize=32768) as stream:
                 while True:
-                    audio_data = self.audio_queue.get()
+                    vol, audio_data = self.audio_queue.get()
                     if audio_data is None:
                         break  # Exit the loop if we get a None item in the queue
+                    
+                    ## Set the volume based on the user's volume setting
+                    vol = vol / 100.0
+                    audio_data = (audio_data * vol).astype(numpy.int16)
                     stream.write(audio_data)
+
         except Exception as e:
             self.logger.info(f"Bad luck tergis {e}")
 
@@ -438,17 +448,18 @@ class Plugin:
     def sound_received_handler(self, user, soundchunk):
         decky_plugin.logger.info(f"Sound received {user}")
         try:
-            if not self.deafened:
+            if not self.deafened and user['name'] not in self.muted_users:
                 asyncio.run(self.broadcast_update(self, username=user))
                 device_info = sd.query_devices(self.selected_output_device, 'output')
                 stereo_data = mono_to_stereo(soundchunk.pcm)
-                self.audio_queue.put(stereo_data)
+                self.audio_queue.put((user['volume'], stereo_data))
         except Exception as e:
             decky_plugin.logger.error(f"Failed to handle sound received: {e}")
 
     def user_added_handler(self, user):
         decky_plugin.logger.info(f"user added: {user}")
         self.messages.append(json.dumps({'type': 'message', 'actor': 'Server', 'message': f"{user['name']} joined", 'time': str(datetime.datetime.now().strftime("%H:%M:%S"))}))
+        self.mumble.users[user['session']]['volume'] = 100
         asyncio.run(self.broadcast_update(self, reason="User added"))
 
     def user_updated_handler(self, user, changes):
@@ -671,11 +682,27 @@ class Plugin:
                 for user in channel_obj.get_users():
                     channels_and_users[channel_obj["name"]]["users"][user["name"]] = {
                         "muted": self.check_user_muted(self, user),
-                        "ID": user['session']
+                        "ID": user['session'],
+                        "volume": user['volume']
                     }
             return channels_and_users
         else:
             return {}
+    
+    @catch_errors
+    async def mute_user(self, userName):
+        self.muted_users.append(userName)
+        self.logger.info(f"Muted users CUP OF TURD: {self.muted_users}")
+        return self.muted_users
+    
+    async def unmute_user(self, userName):
+        self.muted_users.remove(userName)
+        self.logger.info(f"Muted users CUP OF UNTURD: {self.muted_users}")
+        return self.muted_users
+
+    async def get_muted_users(self):
+        self.logger.info(f"Muted users GOT TURDS: {self.muted_users}")
+        return self.muted_users
             
     async def getConnected(self):
         return self.connected
@@ -689,6 +716,23 @@ class Plugin:
     async def getUsername(self):
         return self.connection.username
     
+    @catch_errors
+    async def setUserVolume(self, user, volume):
+        self.logger.info(f"Setting user volume: {user}, {volume}")
+        for u in self.mumble.users:
+            if self.mumble.users[u]['name'] == user:
+                self.mumble.users[u]['volume'] = volume
+                return self.mumble.users[u]['volume']
+    
+    async def getUserVolume(self, user):
+        self.logger.info(f"Getting user volume ASS1: {user}")
+        for u in self.mumble.users:
+            if self.mumble.users[u]['name'] == user:
+                self.logger.info(f"Getting user volume: {user}")
+                self.logger.info(f"{self.mumble.users[u]['volume']}")
+                return self.mumble.users[u]['volume']
+        return 0
+    
     async def getMessagesArray(self):
         self.logger.info(self.messages)
         return self.messages
@@ -700,7 +744,7 @@ class Plugin:
             return False
 
     async def get_selected_recipient(self):
-        decky_plugin.logger.info(f"Eatign a turd")
+        decky_plugin.logger.info(f"got selected recipient")
         return self.selected_recipient
     
     async def set_selected_recipient(self, ID=int, name=str):
