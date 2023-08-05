@@ -37,24 +37,36 @@ Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also 
 - Configuration to enable notifications (toasts) for events
 - Manage certificates
 - Anything and everything else I can think of
+- Find a way to package it without requiring the user to run pip install numpy
 - Think of a good name for it
 
 ### To install:
+Now that I have a .zip file release, you can install this plugin if you enable Decky Loader Developer mode. The only other pre-requisite is that numpy is installed via pip, since numpy doesn't play nice when trying to package up for distribution.
+
+##### The pre-requisites are:
+-  A Steam Deck with Decky Loader installed
+-  numpy installed on the Steam Deck
+
+
+On your Steam Deck:
+1. Install [Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)
+2. You need to install numpy to your Steam Deck. Open a terminal and run: `python -m pip install numpy`
+3. Download the .zip release and install it via Decky Loader Developer menu
+4. Restart Steam Deck
+5. Enjoy!
+
+
+### To build:
+
  Make sure to read up on how the [Decky Template Repository](https://github.com/SteamDeckHomebrew/decky-plugin-template) is organized. 
  I am assuming you are using a GNU/Linux based OS with a bash terminal. I have no idea how to build this on Windows or Mac, but if you're determined enough, you can figure it out.
 
-The pre-requisites for this to work are:
--  A Steam Deck with Decky Loader installed
--  numpy installed on the Steam Deck
--  Your build machine needs [pnpm](https://pnpm.io/installation) and Python3 with pip installed:
+Build machine pre-requisites are:
+ -  Your build machine needs [pnpm](https://pnpm.io/installation) and Python3 with pip installed:
     - Arch Linux: `sudo pacman -S pnpm python pip`
     - Debian / Ubuntu:
         - `sudo apt install python3 python3-pip`
         - `curl -fsSL https://get.pnpm.io/install.sh | sh -`
-
-On your Steam Deck:
-1. Install [Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)
-2. You need to install numpy to your Steam Deck: `python -m pip install numpy`
 
 On the build machine:
 1. Clone this repo and cd: `git clone git@github.com:manbearpig3130/deckyble.git && cd deckyble`

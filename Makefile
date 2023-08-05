@@ -68,6 +68,10 @@ deploy-steamdeck: ## Deploy plugin build to steamdeck
 	@ssh $(DECK_USER)@$(DECK_HOST) -p $(DECK_PORT) -i $(DECK_KEY) \
  		'chmod -v 755 $(DECK_HOME)/homebrew/plugins/'
 
+zip:
+	@echo "+ $@"
+	
+
 restart-decky: ## Restart Decky on remote steamdeck
 	@echo "+ $@"
 	@ssh -t $(DECK_USER)@$(DECK_HOST) -p $(DECK_PORT) -i $(DECK_KEY) \

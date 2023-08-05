@@ -1,7 +1,7 @@
 {
   "name": "Mumble",
   "author": "Dense",
-  "flags": ["debug", "root"],
+  "flags": ["debug"],
   "publish": {
     "tags": ["template"],
     "description": "Mumble in your Steam Deck.",
