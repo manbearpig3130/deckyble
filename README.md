@@ -20,10 +20,12 @@ Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also 
 - Navigate Channels
 - Local volume adjustment for each user
 - User comments
+- Show server info
+- Access token support, with ability to kick users
 
 ### To do:
-- Server access token support and related admin functions
-- Show server and user info
+- Rest of the admin related functions
+- Show user info and Server certificate chain info
 - Audio quality customization, input compression customization
 - Recording
 - Make the interface generally less shitty
@@ -88,3 +90,6 @@ On the build machine:
 
 ### Sound Settings:
 ![Sound Settings](img/soundsettings.png)
+
+### Server Info:
+![Server Info](img/serverinfo.png)

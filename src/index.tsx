@@ -511,6 +511,12 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
     }
   };
 
+  const handleKickUser = async (event: any, userName: string) => {
+    const r = await server.callPluginMethod("kick_user", { user: userName }) as PluginMethodResponse<boolean>;
+    console.log("Trying to kick user", userName);
+    console.log("response", r.result)
+  }
+
   useEffect(() => {
     console.log("UserMenu Fetussed.");
     getMyName();
@@ -536,7 +542,7 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
             await server.callPluginMethod("set_selected_recipient", { ID: userID as number, name: userName as string })
             handleOpenModal();
           }}>Send Message</MenuItem>
-          <MenuItem onClick={() => console.log(`Kick user: ${userName}`)}>Kick</MenuItem>
+          <MenuItem onClick={(e) => handleKickUser(e, userName)}>Kick</MenuItem>
         </Fragment>
       )}
     </Menu>
@@ -637,6 +643,9 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
     <PanelSectionRow>
     <ConnectButton connected={connected}/>
   </PanelSectionRow>
+  <PanelSectionRow>
+    <InfoButton/>
+    </PanelSectionRow>
   </div>
   );
 };
@@ -654,6 +663,72 @@ const ConnectButton: FC<{ connected: boolean }> = ({connected}) => {
     <ButtonItem layout="below" onClick={connected ? handleDisconnect : handleConnect}>
         {connected ? "Disconnect" : "Connect"}
       </ButtonItem>
+  )
+}
+
+const InfoButton: FC<{ }> = ({}) => {
+  const [closeModal, setCloseModal] = useState<(() => void) | null>(null);
+
+  const ServerInfoModal: FC<{ closeModal: () => void, info: any }> = ({ closeModal, info }) => {
+    useEffect(() => {
+      console.log("infoModal Fetussed.");
+    }, []);
+
+    return (
+      <ModalRoot closeModal={closeModal}>
+  <div style={{ display: "flex" }}>
+    <div style={{ flex: "1" }}>
+      <span style={{ fontWeight: "bold" }}><Field label={"Server Info:"} /></span>
+      <div><span style={{ fontWeight: "bold" }}>Host:</span> {info.host + ":" + info.port}</div>
+      <div><span style={{ fontWeight: "bold" }}>Version:</span> {info.version}</div>
+      <div><span style={{ fontWeight: "bold" }}>OS:</span> {info.os + " / " + info.osVersion}</div>
+      <div><span style={{ fontWeight: "bold" }}>Users:</span> {info.users + "/" + info.max_users}</div>
+      <div><span style={{ fontWeight: "bold" }}>HTML Allowed:</span> {info.allowHtml ? "Yes" : "No"}</div>
+      <div><span style={{ fontWeight: "bold" }}>Max message length:</span> {info.messageLength}</div>
+      <div><span style={{ fontWeight: "bold" }}>Max image message length:</span> {info.imageMessageLength}</div>
+      <div><span style={{ fontWeight: "bold" }}>Max supported users:</span> {info.maxUsers}</div>
+    </div>
+    <div style={{ flex: "1" }}>
+    <span style={{ fontWeight: "bold" }}><Field label={"Connection Info:"} /></span>
+      <div><span style={{ fontWeight: "bold" }}>Ping:</span> {info.ping + "ms"}</div>
+      <div><span style={{ fontWeight: "bold" }}>Bandwidth:</span> {info.bandwidth}</div>
+      <div><span style={{ fontWeight: "bold" }}>Cipher suite:</span> {info.suite}</div>
+      <div><span style={{ fontWeight: "bold" }}>TLS version:</span> {info.cipher_version}</div>
+      <div><span style={{ fontWeight: "bold" }}>Secret bits:</span> {info.bits}</div>
+    </div>
+  </div>
+  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+    <ButtonItem onClick={closeModal}>Close</ButtonItem>
+  </div>
+</ModalRoot>
+
+    );
+  };
+
+  useEffect(() => {
+    console.log("info Button has Fetussed.");
+  }, []);
+
+  const handleInfoClick = async () => {
+    console.log("info");
+    const response = await server.callPluginMethod("getInfo", {}) as PluginMethodResponse<any>;
+    console.log(response)
+    console.log(response.result)
+    console.log(response.success)
+    if (response.success) {
+      console.log("cup of info")
+      const modalInfoProps: ShowModalProps = {
+        strTitle: 'Info Modal',
+        bHideMainWindowForPopouts: false,
+        fnOnClose: () => console.log("Modal closed")
+    };
+    const modalResult = showModal(<ServerInfoModal info={response.result} closeModal={() => closeModal?.()} />, undefined, modalInfoProps);
+    setCloseModal(() => modalResult.Close);
+    }
+  }
+
+  return(
+    <ButtonItem layout="below" onClick={handleInfoClick}>{"Server info"}</ButtonItem>
   )
 }
 

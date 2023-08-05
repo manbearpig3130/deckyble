@@ -2,6 +2,7 @@ import decky_plugin
 from struct import *
 import socket, sys, time, datetime, numpy, json
 from dataclasses import dataclass, asdict
+from typing import Optional, List
 
 @dataclass
 class ServerConnection:
@@ -10,6 +11,7 @@ class ServerConnection:
     username: str
     password: str
     label: str
+    tokens: Optional[List[str]] = None
 
     def to_json(self):
         return asdict(self)
@@ -33,6 +35,7 @@ def mumble_ping(host, port, verbose=False):
         sys.exit()
 
     r = unpack(">bbbbQiii", data)
+    decky_plugin.logger.info(f"Received ping response: {r}")
 
     ping = (datetime.datetime.now().microsecond - r[4]) / 1000.0
     if ping < 0:

@@ -19,10 +19,11 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
   const [username, setUsername] = useState('');
   const [label, setLabel] = useState('');
   const [password, setPassword] = useState('');
+  const [tokens, setTokens] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchSettings = async () => {
-      const currentServer = await serverAPI.callPluginMethod("getCurrentServer", {}) as PluginMethodResponse<{host: string, port: string, username: string, password: string, label: string}>;
+      const currentServer = await serverAPI.callPluginMethod("getCurrentServer", {}) as PluginMethodResponse<{host: string, port: string, username: string, password: string, label: string, tokens: string[]}>;
       console.log("currentServer", currentServer);
 
       setAddress(currentServer.result.host);
@@ -30,6 +31,7 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
       setUsername(currentServer.result.username);
       setLabel(currentServer.result.label);
       setPassword(currentServer.result.password);
+      setTokens(currentServer.result.tokens);
     };
     fetchSettings();
   }, [serverAPI]);
@@ -37,8 +39,8 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
   const handleSubmit = async () => {
     let error;
     try {
-      console.log("terd", { address: address, port: port, username: username, label: label, password: password });
-      const arse = await serverAPI.callPluginMethod("saveServer", { address: address, port: port, username: username, label: label, password: password || '' });
+      console.log("terd", { address: address, port: port, username: username, label: label, password: password, tokens: tokens });
+      const arse = await serverAPI.callPluginMethod("saveServer", { address: address, port: port, username: username, label: label, password: password || '', tokens: tokens || '' });
       console.log("arse", arse);
       serverAPI.toaster.toast({
         title: 'Success',
@@ -63,7 +65,7 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
   <div style={{ display: "flex"}}>
     <div style={{ flex: 1, margin: "0 8px" }}>
       <TextField 
-        label="Address" 
+        label="Address:" 
         value={address} 
         onChange={e => setAddress(e.target.value)} 
         style={{ width: "100%" }}
@@ -71,7 +73,7 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
     </div>
     <div style={{ flex: 1, margin: "0 8px" }}>
       <TextField 
-        label="Port" 
+        label="Port:" 
         value={port} 
         onChange={e => setPort(e.target.value)} 
         style={{ width: "100%" }}
@@ -81,7 +83,7 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
   <div style={{ display: "flex"}}>
     <div style={{ flex: 1, margin: "0 8px" }}>
       <TextField 
-        label="Username" 
+        label="Username:" 
         value={username} 
         onChange={e => setUsername(e.target.value)} 
         style={{ width: "100%" }}
@@ -89,14 +91,15 @@ const MyForm = ({ serverAPI }: MyFormProps) => {
     </div>
     <div style={{ flex: 1, margin: "0 8px" }}>
       <TextField 
-        label="Server Name" 
+        label="Server Name:" 
         value={label} 
         onChange={e => setLabel(e.target.value)} 
         style={{ width: "100%" }}
       />
     </div>
   </div>
-  <TextField label="Password" value={password} onChange={e => setPassword(e.target.value)} />
+  <TextField label="Password:" value={password} onChange={e => setPassword(e.target.value)} />
+  <TextField label="Tokens (separate with spaces):" value={tokens.join(' ')} onChange={e => setTokens(e.target.value.split(' '))} />
   <ButtonItem onClick={handleSubmit}>Save</ButtonItem>
 </div>
 

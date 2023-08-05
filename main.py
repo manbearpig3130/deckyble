@@ -210,7 +210,7 @@ class Plugin:
             for websocket in self.clients.get(channel, []):
                 try:
                     response = await websocket.send(json.dumps({'type': 'update', 'reason': reason}))
-                    decky_plugin.logger.info(f"TERGID RESPONSE?? {response}")
+                    #decky_plugin.logger.info(f"TERGID RESPONSE?? {response}")
                 except Exception as e:
                     decky_plugin.logger.info("Failed to send update")
                     decky_plugin.logger.info(e)
@@ -232,8 +232,8 @@ class Plugin:
             decky_plugin.logger.info(f"Connecting to server")
             try:
                 self.open_audio_stream(self)
-                decky_plugin.logger.info(f"Connecting to server: {str(self.connection.host)}:{self.connection.port}")
-                self.mumble = CustomMumble(self.connection.host, self.connection.username, port=int(self.connection.port), certfile=None, keyfile=None, password=self.connection.password)
+                decky_plugin.logger.info(f"Connecting to server: {str(self.connection.host)}:{self.connection.port} Tokens: {self.connection.tokens}")
+                self.mumble = CustomMumble(self.connection.host, self.connection.username, port=int(self.connection.port), certfile=None, keyfile=None, password=self.connection.password, tokens=self.connection.tokens)
                 self.mumble.set_receive_sound(True)
                 self.messages = []
 
@@ -266,6 +266,7 @@ class Plugin:
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELREMOVED, partial(self.channel_removed_handler, self))
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED, partial(self.message_received_handler, self))
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_DISCONNECTED, partial(self.disconnected_handler, self))
+                self.mumble.callbacks.set_callback(pymumble.constants.PYMUMBLE_CLBK_ACLRECEIVED, self.acl_received_handler)
                 self.mumble.set_comment_update_callback(self.comment_updated_handler)
                 
                 await self.broadcast_update(self, reason="Connected to server")
@@ -419,9 +420,11 @@ class Plugin:
             self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_USERREMOVED)
             self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED)
             self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_DISCONNECTED)
+            self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_ACLRECEIVED)
+            self.mumble.remove_comment_update_callback()
             #await self.broadcast_update(self)
             self.stream.stop()
-            self.audio_queue.put(None)
+            self.audio_queue.put((None, None))
             self.playback_thread.join()
             return users
         except Exception as e:
@@ -502,6 +505,27 @@ class Plugin:
     def comment_updated_handler(self, comment):
         decky_plugin.logger.info(f"comment updated {comment}")
 
+    @catch_errors
+    def acl_received_handler(event):
+        try:
+            decky_plugin.logger.info(f"acl received ")
+            decky_plugin.logger.info(f"acl received {event}")
+
+            for group in event.groups:
+                if event.group.name == "admin":
+                    decky_plugin.logger.info(f"IN TERGID admin group{[user for user in group.add]}")
+        except Exception as e:
+            decky_plugin.logger.info(f"Failed to handle acl received: {e}")
+
+        # # Check if our user is in the 'admin' group
+        # for group in acl.groups:
+        #     if group.name == "admin" and self.mumble.users.myself['name'] in group.members:
+        #         self.logger.info(f"User is admin")
+        #         return True
+        
+        # self.logger.info(f"User is NOT A TERGID admin")
+        # return False
+
 
     ###########################################################################
     ##                      Getter and Setter functions                      ##
@@ -555,8 +579,10 @@ class Plugin:
        return self.settings.setSetting(key, value)
     
     @catch_errors
-    async def saveServer(self, address, port, username, label, password):
-        server = ServerConnection(address, port, username, password, label)
+    async def saveServer(self, address, port, username, label, password, tokens):
+        # if tokens is not None:
+        #     tokens = tokens.split()
+        server = ServerConnection(address, port, username, password, label, tokens)
         for i in self.savedServers:
             if i['label'] == label:
                 self.logger.info(f"Already exists. updating...: {server}")
@@ -607,7 +633,7 @@ class Plugin:
 
     async def mute(self):
         decky_plugin.logger.info(f"Muting self")
-        #decky_plugin.logger.info(f"USERS: {self.mumble.users}")
+        #self.check_if_admin(self, self.mumble.my_channel())
         
         try:
             if self.connected:
@@ -620,11 +646,11 @@ class Plugin:
             decky_plugin.logger.info(f"Turgidson?")
             decky_plugin.logger.info(e)
         
-        threads = threading.enumerate()
-        decky_plugin.logger.info(f"Threads: {str(threads)}")
-        await asyncio.sleep(0.1)
-        for thread in threads:
-            decky_plugin.logger.info(f"Thread name: {thread.getName()}, Thread ID: {thread.ident}")
+        #threads = threading.enumerate()
+        #decky_plugin.logger.info(f"Threads: {str(threads)}")
+        #await asyncio.sleep(0.1)
+        #for thread in threads:
+        #    decky_plugin.logger.info(f"Thread name: {thread.getName()}, Thread ID: {thread.ident}")
         decky_plugin.logger.info(f"Muted: {self.muted}")
         return True
 
@@ -997,6 +1023,18 @@ class Plugin:
         return comment
     
     @catch_errors
+    async def kick_user(self, user):
+        self.logger.info(f"Kicking user: {user}")
+        for u in self.mumble.users:
+            if self.mumble.users[u]['name'] == user:
+                try:
+                    self.mumble.users[u].kick()
+                    return True
+                except Exception as e:
+                    self.logger.info(f"Error kicking user {user}: {e}")
+        return False
+    
+    @catch_errors
     async def get_comment(self, user):
         for u in self.mumble.users:
             if self.mumble.users[u]['name'] == user:
@@ -1008,3 +1046,22 @@ class Plugin:
                     self.logger.info(f"Error getting user comment: {e}")
                     return ""
         return ""
+    
+    @catch_errors
+    def check_if_admin(self, channel):
+        # Fetch the ACL for the channel
+        try:
+            self.mumble.channels[0].request_acl()
+            self.mumble.my_channel().acl.request_group_update(group_name='admin')
+            self.logger.info(f"requested ACL")
+        except Exception as e:
+            self.logger.info(f"Error requesting ACL: {e}")
+
+    @catch_errors
+    async def getInfo(self):
+        info = self.connection.to_json()
+        decky_plugin.logger.info(f"info: {info}")
+        moreInfo = mumble_ping(info['host'], int(info['port']))
+        mergedInfo = {**info, **moreInfo, **self.mumble.server_info, **self.mumble.server_version_info, **self.mumble.cipher_info, 'codec': self.mumble.codec}
+        decky_plugin.logger.info(f"mergedInfo: {mergedInfo}")
+        return mergedInfo
