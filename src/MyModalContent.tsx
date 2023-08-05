@@ -87,7 +87,7 @@ export const MyModalContent: FC<{ closeModal: () => void }> = ({ closeModal }) =
 
     const sendChatMsg = async (msg: any) => {
         console.log(msg);
-        (await erverAPI.callPluginMethod("send_text_message_to_server", {
+        (await server.callPluginMethod("send_text_message_to_server", {
           msg,
         })) as PluginMethodResponse<any>;
       };

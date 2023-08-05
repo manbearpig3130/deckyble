@@ -266,6 +266,7 @@ class Plugin:
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELREMOVED, partial(self.channel_removed_handler, self))
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED, partial(self.message_received_handler, self))
                 self.mumble.callbacks.add_callback(pymumble.constants.PYMUMBLE_CLBK_DISCONNECTED, partial(self.disconnected_handler, self))
+                self.mumble.set_comment_update_callback(self.comment_updated_handler)
                 
                 await self.broadcast_update(self, reason="Connected to server")
                 decky_plugin.logger.info(f"Connected")
@@ -497,6 +498,10 @@ class Plugin:
         asyncio.run(self.broadcast_update(self))
         asyncio.run(self.leave_server(self))
 
+    @catch_errors
+    def comment_updated_handler(self, comment):
+        decky_plugin.logger.info(f"comment updated {comment}")
+
 
     ###########################################################################
     ##                      Getter and Setter functions                      ##
@@ -602,6 +607,7 @@ class Plugin:
 
     async def mute(self):
         decky_plugin.logger.info(f"Muting self")
+        #decky_plugin.logger.info(f"USERS: {self.mumble.users}")
         
         try:
             if self.connected:
@@ -983,3 +989,22 @@ class Plugin:
                 turdname = i['name']
         decky_plugin.logger.info({'ID': self.selected_input_device, 'name': turdname})
         return {'ID': self.selected_input_device, 'name': turdname}
+    
+    @catch_errors
+    async def set_comment(self, comment):
+        self.logger.info(f"Setting comment: {comment}")
+        self.mumble.users.myself.comment(comment)
+        return comment
+    
+    @catch_errors
+    async def get_comment(self, user):
+        for u in self.mumble.users:
+            if self.mumble.users[u]['name'] == user:
+                self.logger.info(f"Getting user comment: {user}")
+                try:
+                    self.logger.info(f"{self.mumble.users[u]['comment']}")
+                    return self.mumble.users[u]['comment']
+                except Exception as e:
+                    self.logger.info(f"Error getting user comment: {e}")
+                    return ""
+        return ""

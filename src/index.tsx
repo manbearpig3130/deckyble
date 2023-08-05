@@ -15,7 +15,8 @@ import {
   ShowModalProps,
   showModal,
   ModalRoot,
-  SliderField
+  SliderField,
+  TextField
 } from "decky-frontend-lib";
 
 
@@ -398,25 +399,146 @@ const ChannelsAndUsers: FC = () => {
     }
   };
 
+  const CommentModal: FC<{ closeModal: () => void,  userName: string, comment: string }> = ({ closeModal, userName, comment }) => {
+    return (
+      <ModalRoot closeModal={closeModal}>
+        <div>
+          <Field 
+            label={<Fragment>{"Comment for "}{userName}{": "}</Fragment>}
+          />
+        </div>
+        <div>
+          <Field 
+            label={<span id="turd1" dangerouslySetInnerHTML={{ __html: comment }}></span>}
+          />
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <ButtonItem onClick={closeModal}>Close</ButtonItem>
+        </div>
+      </ModalRoot>
+    );
+  };
+
+  const SetCommentModal: FC<{ closeModal: () => void, myName: string }> = ({ closeModal, myName }) => {
+    const [value, setValue] = useState("");
+
+    const getComment = async ( userName: string ) => {
+      const r = await server.callPluginMethod("get_comment", { user: userName }) as PluginMethodResponse<string>;
+      console.log(r);
+      setValue(r.result);
+    }
+
+    const setComment = async (comment: string) => {
+      console.log("set comment ASS", comment);
+      const r = await server.callPluginMethod("set_comment", { comment: comment }) as PluginMethodResponse<string>;
+      console.log(r);
+    }
+
+    const handleSubmitComment = async () => {
+      console.log("set comment");
+      setComment(value);
+      closeModal();
+    }
+
+    useEffect(() => {
+      console.log("UserMenu Fetussed.");
+      getComment(myName);
+    }, []);
+
+    return (
+      <ModalRoot closeModal={closeModal}>
+    <div>
+    <TextField 
+        label="Set Comment:" 
+        value={value} 
+        onChange={e => setValue(e.target.value)} 
+        style={{ width: "100%" }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleSubmitComment();
+          }
+        }}
+      />
+    </div>
+
+    <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <ButtonItem onClick={closeModal}>Close</ButtonItem>
+          <ButtonItem onClick={handleSubmitComment}>Set comment</ButtonItem>
+        </div>
+      </ModalRoot>
+    );
+  };
+
 
 const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
   
   console.log('Modal context:', handleOpenModal);
   const isMuted = mutedUsers.includes(userName);
+  const [myName, setMyName] = useState("");
+
+  const handleSetComment = async (event: any, userName: string) => {
+    console.log("set comment");
+    const modalSetCommentProps: ShowModalProps = {
+      strTitle: 'Set Comment Modal',
+      bHideMainWindowForPopouts: false,
+      fnOnClose: () => console.log("Modal closed")
+  };
+  const modalResult = showModal(<SetCommentModal myName={myName} closeModal={() => closeModal?.()} />, undefined, modalSetCommentProps);
+  setCloseModal(() => modalResult.Close);
+
+  }
+  
+  const handleGetComment = async (event: any, userName: string) => {
+    console.log("get comment");
+    const r = await server.callPluginMethod("get_comment", { user: userName }) as PluginMethodResponse<string>;
+    console.log("SHIT COME ON", r);
+
+    const modalCommentProps: ShowModalProps = {
+      strTitle: 'Comment Modal',
+      bHideMainWindowForPopouts: false,
+      fnOnClose: () => console.log("Modal closed")
+  };
+  const modalResult = showModal(<CommentModal userName={userName} comment={r.result} closeModal={() => closeModal?.()} />, undefined, modalCommentProps);
+  setCloseModal(() => modalResult.Close);
+  }
+
+  const getMyName = async () => {
+    const response = await server.callPluginMethod("getUsername", {}) as PluginMethodResponse<string>;
+    if (response.success) {
+      setMyName(response.result);
+      console.log("My name is: ", response.result);
+    }
+  };
+
+  useEffect(() => {
+    console.log("UserMenu Fetussed.");
+    getMyName();
+  }, []);
+  const isCurrentUser = userName === myName;
   
   return (
     <Menu label={userName}>
-      <MenuItem onClick={(e) => handleMuteUser(e, userName)}>{isMuted ? 'Unmute User' : 'Local Mute'}</MenuItem>
-      <MenuItem onClick={(e) => handleOpenUserVolumeAdjust(e, userName)}>{'Volume Adjustment'}</MenuItem>
-      <MenuItem onClick={async () => {
-        console.log("TRYING MODAL FART");
-        console.log("handleOpenModal function: ", handleOpenModal);
-        setSelectedRecipient({ ID: userID, name: userName });
-        await server.callPluginMethod("set_selected_recipient", { ID: userID as number, name: userName as string })
-        handleOpenModal();
-        console.log("TERGINAL DENSE", userID, userName);
-        }}>Send Message</MenuItem>
-      <MenuItem onClick={() => console.log(`Kick user: ${userName}`)}>Kick</MenuItem>
+      {isCurrentUser ? (
+        <Fragment>
+          {/* Menu items for the current user */}
+          <MenuItem onClick={(e) => handleSetComment(e, userName)}>{'Set Comment'}</MenuItem>
+          <MenuItem onClick={(e) => handleGetComment(e, userName)}>{'View Comment'}</MenuItem>
+        </Fragment>
+      ) : (
+        <Fragment>
+          {/* Menu items for other users */}
+          <MenuItem onClick={(e) => handleMuteUser(e, userName)}>{isMuted ? 'Unmute User' : 'Local Mute'}</MenuItem>
+          <MenuItem onClick={(e) => handleOpenUserVolumeAdjust(e, userName)}>{'Volume Adjustment'}</MenuItem>
+          <MenuItem onClick={(e) => handleGetComment(e, userName)}>{'View Comment'}</MenuItem>
+          <MenuItem onClick={async () => {
+            setSelectedRecipient({ ID: userID, name: userName });
+            await server.callPluginMethod("set_selected_recipient", { ID: userID as number, name: userName as string })
+            handleOpenModal();
+          }}>Send Message</MenuItem>
+          <MenuItem onClick={() => console.log(`Kick user: ${userName}`)}>Kick</MenuItem>
+        </Fragment>
+      )}
     </Menu>
   );
 };

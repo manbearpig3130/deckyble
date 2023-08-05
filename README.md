@@ -19,11 +19,11 @@ Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also 
 - Text chat to channels and privately to other users
 - Navigate Channels
 - Local volume adjustment for each user
+- User comments
 
 ### To do:
 - Server access token support and related admin functions
 - Show server and user info
-- User comments
 - Audio quality customization, input compression customization
 - Recording
 - Make the interface generally less shitty
