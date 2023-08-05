@@ -4,10 +4,11 @@ This repository is an attempt to create a Mumble VOIP client built into the Stea
 
 Uses Pymumble in the backend for handling the connection.
 
-Why do we need a Mumble plugin for the Steam Deck? 
-Well, we don't really. I don't know who will use it when one can use the full Mumble client by launching it as a game in Steam, but it is a bit un-intuitive. 
-This was just an idea I had which made for a great project to hone my Python skills, and to learn Typescript / React. 
+Why do we want a Mumble plugin for the Steam Deck?
 
+One can already use the full Mumble client by launching it as a game in Steam, but this is a bit un-intuitive at the moment with the Steam Deck. This plugin aims to make it easier to join your favorite Mumble servers and chat without too much hassle by being built into the Steam Deck Big Picture interface. 
+
+This was just an idea I had which made for a great project to hone my Python skills, and to learn Typescript / React. 
 While this plugin is very experimental, I've got it to a point where it actually functions as a working, yet minimalistic Mumble client
 
 Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also happens to have a [TeamSpeak Deck plugin](https://github.com/ILadis/ts3-qs4sd) which was super useful to me when troubleshooting how to get inputs from the Deck controls. Vielen Dank!
@@ -19,7 +20,7 @@ Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also 
 - Text chat to channels and privately to other users
 - Navigate Channels
 - Local volume adjustment for each user
-- User comments
+- View and Set user comments
 - Show server info
 - Access token support, with ability to kick users
 
@@ -28,12 +29,13 @@ Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also 
 - Show user info and Server certificate chain info
 - Audio quality customization, input compression customization
 - Recording
-- Make the interface generally less shitty
+- Make the interface generally less shitty. Add some nice icons etc.
 - Remove all the profanity and nonsense from the code. It's just how I keep things interesting...
 - Enhance push-to-talk
 - Public server browser
 - Networking options such as proxies, force TCP, reconnecting on disconnect etc.
 - Configuration to enable notifications (toasts) for events
+- Manage certificates
 - Anything and everything else I can think of
 - Think of a good name for it
 
