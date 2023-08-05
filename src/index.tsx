@@ -643,9 +643,7 @@ const UserMenu: FC<IUserMenuProps> = ({ userID, userName }) => {
     <PanelSectionRow>
     <ConnectButton connected={connected}/>
   </PanelSectionRow>
-  <PanelSectionRow>
-    <InfoButton/>
-    </PanelSectionRow>
+    {connected ? (<PanelSectionRow><InfoButton/></PanelSectionRow>):(null)}
   </div>
   );
 };
