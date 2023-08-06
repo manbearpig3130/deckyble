@@ -14,7 +14,7 @@ While this plugin is very experimental, I've got it to a point where it actually
 Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also happens to have a [TeamSpeak Deck plugin](https://github.com/ILadis/ts3-qs4sd) which was super useful to me when troubleshooting how to get inputs from the Deck controls. Vielen Dank!
 
 ## Features:
-- 3 different voice transmit modes: always-on, voice activity (proud of this one), push-to-talk (Kind of works*)
+- 3 different voice transmit modes: always-on, voice activity, push-to-talk (Kind of works*)
 - Save servers and connect from the server manager
 - Select any Input or Output devices for audio
 - Text chat to channels and privately to other users
