@@ -26,6 +26,7 @@ import { FaShip } from "react-icons/fa";
 import { TransmittingContext, TransmittingProvider } from './TransmittingContext';
 import { ModalContext, ModalContextProvider } from './ModalContext';
 import { ConnectionContext, ConnectionProvider } from './ConnectedContext';
+import { ServerModalContent } from './ServerBrowserModal';
 interface PluginMethodResponse<T> {
   success: boolean;
   result: T;
@@ -150,6 +151,8 @@ const handleSettingsClick = () => {
   Router.CloseSideMenus();
   Router.Navigate("/deckmumble/settings/form1");
 };
+
+
 
 const Tab1Component: FC = () => {
   const { messagesArray, fetchMessages } = useContext(TransmittingContext);
@@ -790,6 +793,18 @@ const Tab3Component: FC = () => {
   //const [isConnected, setisConnected] = useState(false)
   const { setConnected } = useContext(ConnectionContext);
   const [focusedItem, setFocusedItem] = useState<number | null>(null);
+  const [closeModal, setCloseModal] = useState<(() => void) | null>(null);
+
+  const handlePublicServersClick = () => {
+    console.log("CUP OF SERVER MODAL?");
+    const modalProps: ShowModalProps = {
+        strTitle: 'Public Server Modal',
+        bHideMainWindowForPopouts: false,
+        fnOnClose: () => console.log("Modal closed")
+    };
+    const modalResult = showModal(<ServerModalContent serverAPI={server} closeModal={() => closeModal?.()} />, undefined, modalProps);
+    setCloseModal(() => modalResult.Close);
+};
   
 
 
@@ -946,6 +961,9 @@ const Tab3Component: FC = () => {
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={handleSettingsClick}>
             Settings
+          </ButtonItem>
+          <ButtonItem layout="below" onClick={handlePublicServersClick}>
+            Public Servers
           </ButtonItem>
         </PanelSectionRow>
       </PanelSection>

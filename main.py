@@ -1,5 +1,5 @@
 ## Standard imports
-import asyncio, threading, json, queue, os, time, datetime
+import asyncio, threading, json, queue, os, time, datetime, requests
 
 ## Set environment variables so soudndevice can find devices
 os.environ["XDG_RUNTIME_DIR"] = "/run/user/1000"
@@ -10,6 +10,8 @@ import sounddevice as sd
 import websockets, numpy
 import pymumble_py3 as pymumble
 from functools import partial
+from concurrent.futures import ThreadPoolExecutor
+from lxml import etree
 
 ## local imports
 import decky_plugin
@@ -22,6 +24,7 @@ from helpful_functions import mumble_ping, mono_to_stereo, catch_errors, ServerC
 settingsDir = os.environ["DECKY_PLUGIN_SETTINGS_DIR"]
 deckyHomeDir = os.environ["DECKY_HOME"]
 loggingDir = "/home/deck/homebrew/logs/mumble/"
+
 
 async def send_update(websocket, path, thing=None):
     Plugin.clients.setdefault('default', set()).add(websocket)
@@ -57,6 +60,7 @@ class Plugin:
         self.muted = False
         self.deafened = False
         self.connected = False
+        self.publicServers = []
         self.stream = None
         self.audio_queue = queue.Queue()
         self.savedServers = self.settings.getSetting("savedServers", [])
@@ -442,6 +446,70 @@ class Plugin:
         except Exception as e:
             decky_plugin.logger.info(f"Turgidson?")
             decky_plugin.logger.info(e)
+    
+    @catch_errors
+    def query_public_servers(self):
+        listurl = f"https://publist.mumble.info/v1/list"
+        r = requests.get(listurl)
+        #decky_plugin.logger.info(f"requests {r.content}")
+        # Check if the request was successful
+        if r.status_code == 200:
+            # Parse the XML response
+            root = etree.fromstring(r.content)
+            # Iterate through the server elements to extract the server information
+            for server in root.findall('server'):
+                name = server.get('name')
+                ca = server.get('ca')
+                continent_code = server.get('continent_code')
+                country = server.get('country')
+                country_code = server.get('country_code')
+                ip = server.get('ip')
+                port = server.get('port')
+                region = server.get('region')
+                url = server.get('url')
+                # Do something with the server information (e.g., add to a list or print)
+                decky_plugin.logger.info(f"Server Name: {name}, IP: {ip}, Port: {port}, URL: {url}")
+                self.publicServers.append({'name': name, 'ip': ip, 'port': port, 'url': url, 'country': country, 'country_code': country_code, 'ping': 999 })
+        else:
+            decky_plugin.logger.info("Failed to fetch the public server list.")
+
+
+    async def notify_clients(self, server_data, websocket):
+        message = {'type': 'pingupdate', 'data': server_data}
+        await websocket.send(json.dumps(message))
+    
+    # @catch_errors
+    # def pingPublicServers(self, main_event_loop):
+    #     with ThreadPoolExecutor() as executor:
+    #         for s in self.publicServers:
+    #             decky_plugin.logger.info(f"Pinging {s['name']}")
+    #             try:
+    #                 future = executor.submit(mumble_ping, s['ip'], int(s['port']))
+    #                 r = future.result()
+    #                 decky_plugin.logger.info(f"pinged {r}")
+    #                 s['ping'] = r['ping']
+    #                 for websocket in self.clients.get('default', []):
+    #                     self.notify_clients(self, s, websocket)
+    #             except Exception as e:
+    #                 decky_plugin.logger.info(f"Failed to ping {s['name']}")
+    #                 decky_plugin.logger.info(e)
+
+    @catch_errors
+    def pingPublicServers(self, main_event_loop):
+        for s in self.publicServers:
+            decky_plugin.logger.info(f"Pinging {s['name']}")
+            try:
+                r = mumble_ping(s['ip'], int(s['port']))
+                decky_plugin.logger.info(f"pinged {r}")
+                s['ping'] = r['ping']
+                s['users'] = r['users']
+                s['max_users'] = r['max_users']
+                for websocket in self.clients.get('default', []):
+                    coroutine_obj = self.notify_clients(self, s, websocket)
+                    asyncio.run_coroutine_threadsafe(coroutine_obj, main_event_loop)
+            except Exception as e:
+                decky_plugin.logger.info(f"Failed to ping {s['name']}")
+                decky_plugin.logger.info(e)
 
 
     ###########################################################################
@@ -1065,3 +1133,10 @@ class Plugin:
         mergedInfo = {**info, **moreInfo, **self.mumble.server_info, **self.mumble.server_version_info, **self.mumble.cipher_info, 'codec': self.mumble.codec}
         decky_plugin.logger.info(f"mergedInfo: {mergedInfo}")
         return mergedInfo
+    
+    @catch_errors
+    async def getPublicServers(self):
+        self.query_public_servers(self)
+        pingThread = threading.Thread(target=self.pingPublicServers, args=(self, asyncio.get_event_loop()))
+        pingThread.start()
+        return self.publicServers

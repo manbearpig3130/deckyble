@@ -24,15 +24,27 @@ class ServerConnection:
 def mumble_ping(host, port, verbose=False):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(1)
-
     buf = pack(">iQ", 0, datetime.datetime.now().microsecond)
-    s.sendto(buf, (host, port))
-
+    
     try:
+        s.sendto(buf, (host, port))
         data, _ = s.recvfrom(1024)
     except socket.timeout:
-        print(f"{time.time()}:NaN:NaN")
-        sys.exit()
+        decky_plugin.logger.info(f"{host} timed out")
+        return {
+            'version': '',
+            'users': '',
+            'max_users': '',
+            'ping': '',
+            'bandwidth': ''}
+    except Exception as e:
+        decky_plugin.logger.info(f"Farted: {e}")
+        return {
+            'version': '',
+            'users': '',
+            'max_users': '',
+            'ping': '',
+            'bandwidth': ''}
 
     r = unpack(">bbbbQiii", data)
     decky_plugin.logger.info(f"Received ping response: {r}")
