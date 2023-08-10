@@ -47,7 +47,7 @@ def mumble_ping(host, port, verbose=False):
             'bandwidth': ''}
 
     r = unpack(">bbbbQiii", data)
-    decky_plugin.logger.info(f"Received ping response: {r}")
+    #decky_plugin.logger.info(f"Received ping response: {r}")
 
     ping = (datetime.datetime.now().microsecond - r[4]) / 1000.0
     if ping < 0:

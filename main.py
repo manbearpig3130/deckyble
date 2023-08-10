@@ -512,7 +512,7 @@ class Plugin:
         
         for s in self.publicServers:
             if not self.stop_pings_event.is_set():
-                decky_plugin.logger.info(f"Pinging {s['name']}")
+                #decky_plugin.logger.info(f"Pinging {s['name']}")
                 try:
                     r = mumble_ping(s['ip'], int(s['port']))
                     decky_plugin.logger.info(f"pinged {r}")
@@ -702,6 +702,9 @@ class Plugin:
                 self.connection = ServerConnection(**serv)
                 self.logger.info(self.connection)
                 return self.settings.setSetting("currentServer", self.connection.to_json())
+        for serv in self.publicServers:
+            if serv['name'] == serverLabel:
+                self.connection = ServerConnection(serv['ip'], int(serv['port']), "DENSE", "", serv['name'], [''])
         return False
     
     @catch_errors

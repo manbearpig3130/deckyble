@@ -1,5 +1,5 @@
 import React, { useState, FC, useRef, useEffect, ReactNode, Fragment, useContext } from 'react';
-import { ServerAPI, ModalRoot, Field, TextField, ButtonItem, Dropdown, SingleDropdownOption, DropdownOption, ShowModalProps, showModal } from 'decky-frontend-lib';
+import { ServerAPI, Router, ModalRoot, showContextMenu, Menu, MenuItem, Field, TextField, ButtonItem, Dropdown, SingleDropdownOption, DropdownOption, ShowModalProps, showModal } from 'decky-frontend-lib';
 import { TransmittingContext } from './TransmittingContext';
 
 interface PluginMethodResponse<T> {
@@ -24,6 +24,32 @@ interface PluginMethodResponse<T> {
     const [serversArray, setServersArray] = useState<any[]>([]);
     const [pingedArray, setPingedArray] = useState<any[]>([]);
     const ws = new WebSocket("ws://localhost:8765");
+    const [connected, setConnected] = useState<boolean>(false);
+
+    const handleConnect = async () => {
+      //const { setConnected } = useContext(ConnectionContext);
+       
+      const response = await serverAPI.callPluginMethod("connect_server", { }) as PluginMethodResponse<{[channelName: string]: {users: {[username: string]: {muted: boolean, ID: number}}}} | boolean>;
+      if (response.success && response.result !== false) {
+        serverAPI.toaster.toast({
+          title: 'Success',
+          body: "Connected",
+          duration: 1000,
+          critical: false
+        });
+        setConnected(true);
+    
+      } else if (!response.success) {
+        console.error("Failed to connect ");
+        console.error(response);
+      }
+    };
+
+    const getConnected = async () => {
+      const connectedResponse = await serverAPI.callPluginMethod("getConnected", {}) as PluginMethodResponse<boolean>;
+      if (connectedResponse.success) setConnected(connectedResponse.result);
+      return connectedResponse.result;
+    }
 
       const fetchServers = async () => {
         try {
@@ -55,7 +81,53 @@ interface PluginMethodResponse<T> {
       closeModal();
     }
 
+    const ServerMenu = ({serverLabel, isCurrentlyConnected}: {serverLabel: string, isCurrentlyConnected: boolean}) => {
+      
+      const conServer = async ( serverToJoin: string ) => {
+        console.log("CUP OF CONMAN", serverToJoin)
+        await serverAPI.callPluginMethod("setCurrentServer", {serverLabel}) as PluginMethodResponse<any>;
+        handleConnect();
+        sendAndClose();
+      }
+
+      const addServer = async ( serverToAdd: string ) => {
+        console.log("CUP OF addMAN", serverToAdd)
+        await serverAPI.callPluginMethod("setCurrentServer", {serverLabel}) as PluginMethodResponse<any>;
+        sendAndClose();
+        //Router.CloseSideMenus();
+        Router.Navigate("/deckmumble/settings/form1");
+      }
+      
+      return (
+      <Menu label={serverLabel}>
+        {!isCurrentlyConnected && <MenuItem onClick={() => conServer(serverLabel)}>Connect</MenuItem>}
+        <MenuItem onClick={() => addServer(serverLabel)}>Add to saved servers</MenuItem>
+      </Menu>
+      )
+  };
+
+  const handleServerClick = (serverLabel: string, event: any) => {
+    const retardedConnected = async () => {
+      const connectedResponse = await serverAPI.callPluginMethod("getConnected", {}) as PluginMethodResponse<boolean>;
+      if (connectedResponse.success) {
+        setConnected(connectedResponse.result);
+        console.log("WHERE IS MY RETARDMENT? " + connectedResponse.result)
+        if (connectedResponse.result) {
+          showContextMenu(<ServerMenu serverLabel={serverLabel} isCurrentlyConnected={true} />, event.target);
+        }
+        else {
+          showContextMenu(<ServerMenu serverLabel={serverLabel} isCurrentlyConnected={false} />, event.target);
+        }
+      }
+    };
+    console.log("ARSE TERGINOODLE: ", serverLabel, event);
+    retardedConnected();
+    //showContextMenu(<ServerMenu serverLabel={serverLabel} isCurrentlyConnected={connected} />, event.target);
+    console.log(connected);
+  };
+
     useEffect(() => {
+        getConnected();
         fetchServers();
         
     
@@ -119,6 +191,7 @@ interface PluginMethodResponse<T> {
 
             return(
               <Field
+                
                 label={
                   <Fragment>
                     <div style={{ flex: 0.7, textAlign: 'left' }}><span id="thing1">{serv.name + " - " + serv.ip}</span></div>
@@ -126,7 +199,7 @@ interface PluginMethodResponse<T> {
                   </Fragment>
                 }
                 className="field-text-left"
-                onClick={(e) => console.log(e)}
+                onClick={(e: any) => handleServerClick(serv.name, e)}
                 key={index}
               />
             )
