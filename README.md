@@ -33,7 +33,6 @@ Shoutout to [ILadis](https://github.com/ILadis) who starred this repo, but also 
 - Make the interface generally less shitty. Add some nice icons etc.
 - Remove all the profanity and nonsense from the code. It's just how I keep things interesting...
 - Enhance push-to-talk
-
 - Networking options such as proxies, force TCP, reconnecting on disconnect etc.
 - Configuration to enable notifications (toasts) for events
 - Manage certificates
