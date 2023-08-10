@@ -26,23 +26,49 @@ deckyHomeDir = os.environ["DECKY_HOME"]
 loggingDir = "/home/deck/homebrew/logs/mumble/"
 
 
-async def send_update(websocket, path, thing=None):
-    Plugin.clients.setdefault('default', set()).add(websocket)
-    try:
-        while True:  # Keep listening for messages
-            message = await websocket.recv()
-            data = json.loads(message)
-            decky_plugin.logger.info(f"GOT A TERGID UPDATE!!! {message}")
-            if data['type'] == 'join':  # If the client wants to join a channel
-                Plugin.clients.setdefault(data['channel'], set()).add(websocket)
-    except websockets.ConnectionClosed as e:
-        decky_plugin.logger.info(f"CLOSED THE TERGIDS {e}")
-    finally:
-        for clients in Plugin.clients.values():
-            clients.discard(websocket)
+# async def send_update(websocket, path, thing=None):
+#     Plugin.clients.setdefault('default', set()).add(websocket)
+#     try:
+#         while True:  # Keep listening for messages
+#             message = await websocket.recv()
+#             data = json.loads(message)
+#             decky_plugin.logger.info(f"GOT A TERGID UPDATE!!! {message}")
+#             if data['type'] == 'join':  # If the client wants to join a channel
+#                 Plugin.clients.setdefault(data['channel'], set()).add(websocket)
+#             if data['type'] == 'stopPinging':
+#                 Plugin.stop_pinging()
+#     except websockets.ConnectionClosed as e:
+#         decky_plugin.logger.info(f"CLOSED THE TERGIDS {e}")
+#         Plugin.stop_pinging()
+#     finally:
+#         for clients in Plugin.clients.values():
+#             clients.discard(websocket)
 
 class Plugin:
     server_stop_event = asyncio.Event()
+
+
+    async def send_update(self, websocket, path, thing=None):
+        self.clients.setdefault('default', set()).add(websocket)
+        decky_plugin.logger.info("inside seld_update function")
+        try:
+            while True:  # Keep listening for messages
+                message = await websocket.recv()
+                data = json.loads(message)
+                self.logger.info(f"GOT A TERGID UPDATE!!! {message}")
+                if data['type'] == 'join':  # If the client wants to join a channel
+                    self.clients.setdefault(data['channel'], set()).add(websocket)
+                if data['type'] == 'stopPinging':
+                    self.logger.info(f"GOT A STOPPINGING TERGID")
+                    self.stop_pinging(self)
+        except websockets.ConnectionClosed as e:
+            self.logger.info(f"CLOSED THE TERGIDS {e}")
+            if self.stop_pings_event is not None:
+                self.logger.info(f"CLOSING THE PING TERGID SHARTS {e}")
+                ##self.stop_pinging(self)
+        finally:
+            for clients in self.clients.values():
+                clients.discard(websocket)
     ###########################################################################
     ##             Special plugin functions, called by Decky                 ##
     ##                   _main    _unload    _migration                      ##
@@ -64,6 +90,7 @@ class Plugin:
         self.stream = None
         self.audio_queue = queue.Queue()
         self.savedServers = self.settings.getSetting("savedServers", [])
+        self.stop_pings_event = None
         decky_plugin.logger.info(f"saved servers: {self.savedServers}")
         self.messages = []
         self.selected_recipient = { 'ID': 0, 'name': "Channel" }
@@ -116,8 +143,10 @@ class Plugin:
 
         ## Set up the websocket server
         try:
-            async with websockets.serve(lambda websocket, path: send_update(websocket, path, thing=self), "localhost", 8765):
-                await Plugin.server_stop_event.wait()
+            async with websockets.serve(lambda websocket, path: self.send_update(self, websocket, path, thing=self), "localhost", 8765):
+                decky_plugin.logger.info("Tryign to start websocket")
+                await self.server_stop_event.wait()
+                decky_plugin.logger.info("Waiting successfully I think")
         except Exception as e:
             decky_plugin.logger.info("Failed to start websocket server")
             decky_plugin.logger.info(e)
@@ -477,39 +506,35 @@ class Plugin:
     async def notify_clients(self, server_data, websocket):
         message = {'type': 'pingupdate', 'data': server_data}
         await websocket.send(json.dumps(message))
-    
-    # @catch_errors
-    # def pingPublicServers(self, main_event_loop):
-    #     with ThreadPoolExecutor() as executor:
-    #         for s in self.publicServers:
-    #             decky_plugin.logger.info(f"Pinging {s['name']}")
-    #             try:
-    #                 future = executor.submit(mumble_ping, s['ip'], int(s['port']))
-    #                 r = future.result()
-    #                 decky_plugin.logger.info(f"pinged {r}")
-    #                 s['ping'] = r['ping']
-    #                 for websocket in self.clients.get('default', []):
-    #                     self.notify_clients(self, s, websocket)
-    #             except Exception as e:
-    #                 decky_plugin.logger.info(f"Failed to ping {s['name']}")
-    #                 decky_plugin.logger.info(e)
 
     @catch_errors
     def pingPublicServers(self, main_event_loop):
+        
         for s in self.publicServers:
-            decky_plugin.logger.info(f"Pinging {s['name']}")
-            try:
-                r = mumble_ping(s['ip'], int(s['port']))
-                decky_plugin.logger.info(f"pinged {r}")
-                s['ping'] = r['ping']
-                s['users'] = r['users']
-                s['max_users'] = r['max_users']
-                for websocket in self.clients.get('default', []):
-                    coroutine_obj = self.notify_clients(self, s, websocket)
-                    asyncio.run_coroutine_threadsafe(coroutine_obj, main_event_loop)
-            except Exception as e:
-                decky_plugin.logger.info(f"Failed to ping {s['name']}")
-                decky_plugin.logger.info(e)
+            if not self.stop_pings_event.is_set():
+                decky_plugin.logger.info(f"Pinging {s['name']}")
+                try:
+                    r = mumble_ping(s['ip'], int(s['port']))
+                    decky_plugin.logger.info(f"pinged {r}")
+                    s['ping'] = r['ping']
+                    s['users'] = r['users']
+                    s['max_users'] = r['max_users']
+                    for websocket in self.clients.get('default', []):
+                        coroutine_obj = self.notify_clients(self, s, websocket)
+                        asyncio.run_coroutine_threadsafe(coroutine_obj, main_event_loop)
+                except Exception as e:
+                    decky_plugin.logger.info(f"Failed to ping {s['name']}")
+                    decky_plugin.logger.info(e)
+            else:
+                decky_plugin.logger.info(f"Stopping pings TERGINOODLE")
+                break
+
+    
+    def stop_pinging(self):
+        if self.stop_pings_event:
+            self.stop_pings_event.set()
+        else:
+            decky_plugin.logger.info(f"stop_pings_event is None")
 
 
     ###########################################################################
@@ -1137,6 +1162,7 @@ class Plugin:
     @catch_errors
     async def getPublicServers(self):
         self.query_public_servers(self)
+        self.stop_pings_event = threading.Event()
         pingThread = threading.Thread(target=self.pingPublicServers, args=(self, asyncio.get_event_loop()))
         pingThread.start()
         return self.publicServers

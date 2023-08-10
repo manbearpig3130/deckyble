@@ -23,6 +23,7 @@ interface PluginMethodResponse<T> {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const [serversArray, setServersArray] = useState<any[]>([]);
     const [pingedArray, setPingedArray] = useState<any[]>([]);
+    const ws = new WebSocket("ws://localhost:8765");
 
       const fetchServers = async () => {
         try {
@@ -47,11 +48,16 @@ interface PluginMethodResponse<T> {
     //   />
     // )
     // }
-
+    const sendAndClose = () => {
+      ws.send(JSON.stringify({ type: 'stopPinging' }));
+      console.log("SENT CUP OF CLOSURE");
+      ws.close();
+      closeModal();
+    }
 
     useEffect(() => {
         fetchServers();
-        const ws = new WebSocket("ws://localhost:8765");
+        
     
         ws.addEventListener("open", async (event) => {
             console.log("WebSocket connection opened:", event);
@@ -73,6 +79,10 @@ interface PluginMethodResponse<T> {
             console.log("No data received")
             }
         };
+
+        window.addEventListener('beforeunload', () => {
+          ws.send(JSON.stringify({ type: 'stopPinging' }));
+        });
     
     
         return () => {
@@ -83,7 +93,7 @@ interface PluginMethodResponse<T> {
 
 
     return (
-      <ModalRoot closeModal={closeModal}>
+      <ModalRoot closeModal={sendAndClose}>
         <div
           style={{
             maxHeight: "200px", // adjust as needed
@@ -124,7 +134,7 @@ interface PluginMethodResponse<T> {
           <div ref={messagesEndRef} />
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <ButtonItem onClick={closeModal}>Close</ButtonItem>
+          <ButtonItem onClick={sendAndClose}>Close</ButtonItem>
         </div>
       </ModalRoot>
     );
