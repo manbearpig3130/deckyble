@@ -1,5 +1,5 @@
 ## Standard imports
-import asyncio, threading, json, queue, os, time, datetime, requests
+import asyncio, threading, json, queue, os, time, datetime, requests, audioop
 
 ## Set environment variables so soudndevice can find devices
 os.environ["XDG_RUNTIME_DIR"] = "/run/user/1000"
@@ -18,31 +18,70 @@ import decky_plugin
 from settings import SettingsManager
 from steam_deck_input import SteamDeckInput
 from mumble_client import CustomMumble
-from helpful_functions import mumble_ping, mono_to_stereo, catch_errors, ServerConnection
+from helpful_functions import power_mixing, limiter, phase_correlation, catch_errors, mono_to_stereo, mumble_ping, ServerConnection
 
 ## Decky Plugin env variables
 settingsDir = os.environ["DECKY_PLUGIN_SETTINGS_DIR"]
 deckyHomeDir = os.environ["DECKY_HOME"]
 loggingDir = "/home/deck/homebrew/logs/mumble/"
 
+class AudioBuffer:
+    def __init__(self, buffer_size):
+        self.buffer = numpy.zeros((buffer_size, 2), dtype=numpy.int16)
+        self.write_ptr = 0
+        self.read_ptr = 0
+        self.buffer_size = buffer_size
+        self.lock = threading.Lock()
+        self.space_available = buffer_size  # The amount of space available in the buffer.
 
-# async def send_update(websocket, path, thing=None):
-#     Plugin.clients.setdefault('default', set()).add(websocket)
-#     try:
-#         while True:  # Keep listening for messages
-#             message = await websocket.recv()
-#             data = json.loads(message)
-#             decky_plugin.logger.info(f"GOT A TERGID UPDATE!!! {message}")
-#             if data['type'] == 'join':  # If the client wants to join a channel
-#                 Plugin.clients.setdefault(data['channel'], set()).add(websocket)
-#             if data['type'] == 'stopPinging':
-#                 Plugin.stop_pinging()
-#     except websockets.ConnectionClosed as e:
-#         decky_plugin.logger.info(f"CLOSED THE TERGIDS {e}")
-#         Plugin.stop_pinging()
-#     finally:
-#         for clients in Plugin.clients.values():
-#             clients.discard(websocket)
+    def write(self, audio_data):
+        with self.lock:
+            data_len = audio_data.shape[0]
+            
+            # If there's not enough space, we'll discard the oldest data.
+            if data_len > self.space_available:
+                overwrite_len = data_len - self.space_available
+                self.read_ptr = (self.read_ptr + overwrite_len) % self.buffer_size
+                self.space_available += overwrite_len
+
+            # Handle data wrapping around the buffer end.
+            if data_len + self.write_ptr > self.buffer_size:
+                end_space = self.buffer_size - self.write_ptr
+                self.buffer[self.write_ptr:] = audio_data[:end_space]
+                self.buffer[:data_len - end_space] = audio_data[end_space:]
+            else:
+                self.buffer[self.write_ptr:self.write_ptr + data_len] = audio_data
+
+            self.write_ptr = (self.write_ptr + data_len) % self.buffer_size
+            self.space_available -= data_len
+
+    def read(self, length):
+        with self.lock:
+            # Determine how much data we can actually read.
+            data_to_read = min(length, self.buffer_size - self.space_available)
+
+            if self.read_ptr + data_to_read > self.buffer_size:
+                end_space = self.buffer_size - self.read_ptr
+                data = numpy.vstack((self.buffer[self.read_ptr:], self.buffer[:data_to_read - end_space]))
+            else:
+                data = self.buffer[self.read_ptr:self.read_ptr + data_to_read]
+
+            self.read_ptr = (self.read_ptr + data_to_read) % self.buffer_size
+            self.space_available += data_to_read
+
+            return data
+
+def ensure_mono(data):
+    """Convert stereo audio to mono by averaging the channels."""
+    if len(data.shape) == 2:  # Stereo audio
+        data = numpy.mean(data, axis=1, dtype=data.dtype)
+    return data
+def ensure_stereo(data):
+        """Convert mono audio to stereo by duplicating the channel."""
+        if len(data.shape) == 1:  # Mono audio
+            data = numpy.column_stack([data, data])  # Convert to stereo by duplicating
+        return data
+
 
 class Plugin:
     server_stop_event = asyncio.Event()
@@ -88,7 +127,12 @@ class Plugin:
         self.connected = False
         self.publicServers = []
         self.stream = None
+        self.user_audio_buffers = {}
+        self.audio_buffer = AudioBuffer(48000 * 1)
+        self.audio_event = threading.Event() 
         self.audio_queue = queue.Queue()
+        #self.audio_queue.put((100, [[0, 0]]))  # Initialize with an empty list
+        self.stop_audio_thread = threading.Event()
         self.savedServers = self.settings.getSetting("savedServers", [])
         self.stop_pings_event = None
         decky_plugin.logger.info(f"saved servers: {self.savedServers}")
@@ -321,26 +365,66 @@ class Plugin:
             decky_plugin.logger.info(f"No server selected")
             return False
 
-    ## Thread which handles playback of received audio
+    @catch_errors    
+    def mix_audio_buffers(self):
+        non_empty_buffers = [buffer for buffer in self.user_audio_buffers.values() if len(buffer) > 0]
+
+        """Mix audio data from all user buffers."""
+        if len(non_empty_buffers) == 0:  # No audio data available
+            self.logger.debug("No audio data available")
+            return None
+        
+        # Get the shortest buffer (to avoid going out of bounds)
+        min_length = min([len(buffer) for buffer in self.user_audio_buffers.values()])
+        min_length = min_length - (min_length % 2)  # Ensure even length
+
+        # Extract the audio data and mix
+        mixed_audio = numpy.sum([numpy.frombuffer(self.user_audio_buffers[user][:min_length], dtype=numpy.int16) for user in self.user_audio_buffers], axis=0)
+        mixed_audio = numpy.clip(mixed_audio, -32768, 32767).astype(numpy.int16)  
+        self.logger.debug(f"mixed_audio: {mixed_audio}")
+        # Remove the used audio data from buffers
+        for user in self.user_audio_buffers:
+            self.user_audio_buffers[user] = self.user_audio_buffers[user][min_length:]
+
+        # Cleanup empty buffers
+        for user in list(self.user_audio_buffers.keys()):
+            if len(self.user_audio_buffers[user]) == 0:
+                del self.user_audio_buffers[user]
+
+        return mixed_audio.tobytes()
+
     @catch_errors
     def audio_playback_thread(self):
         try:
+            self.stop_audio_thread = threading.Event()
             device_info = sd.query_devices(self.selected_output_device, 'output')
             output_sample_rate = device_info['default_samplerate']
             self.logger.info(f"Tergis fart {self.selected_input_device}, {output_sample_rate}")
-            with sd.OutputStream(samplerate=48000, device=self.selected_output_device, dtype=numpy.int16, channels=2, blocksize=32768) as stream:
-                while True:
-                    vol, audio_data = self.audio_queue.get()
-                    if audio_data is None:
-                        break  # Exit the loop if we get a None item in the queue
-                    
-                    ## Set the volume based on the user's volume setting
-                    vol = vol / 100.0
-                    audio_data = (audio_data * vol).astype(numpy.int16)
-                    stream.write(audio_data)
+            with sd.OutputStream(samplerate=48000, device=self.selected_output_device, dtype=numpy.int16, channels=2, blocksize=8192) as stream:
+                while not self.stop_audio_thread.is_set(): 
+                    #audio_data = self.audio_queue.get()
+                    self.audio_event.wait()
+                    try:
+                        mixed_audio_data = self.mix_audio_buffers(self)
+                        if mixed_audio_data is not None:
+                            mixed_audio_data = mono_to_stereo(mixed_audio_data)
+                        else:
+                            continue
+                    except Exception as e:
+                        self.logger.info(f"Failed to mix audio {e}")
+                        continue
+                    if mixed_audio_data is not None:
+                        self.logger.info(f"Playing audio {mixed_audio_data}")
+
+                        stream.write(mixed_audio_data)
+                    self.audio_event.clear()
+
+                        
+                self.logger.info(f"left loop")
+            self.logger.info(f"left with turd")
 
         except Exception as e:
-            self.logger.info(f"Bad luck tergis {e}")
+            self.logger.info(f"Bad luck tergis {e} --- ")
 
     ## Function for opening the audio stream
     @catch_errors
@@ -400,11 +484,45 @@ class Plugin:
                             callback=input_callback)
             
             self.stream.start()
+            if self.audio_queue is None:
+                self.audio_queue = queue.Queue()
             self.playback_thread = threading.Thread(target=self.audio_playback_thread, args=(self,))
             self.playback_thread.start()
             self.logger.info("Started Audio")
         except Exception as e:
             self.logger.info(e)
+
+    @catch_errors
+    def mix_audio(self, chunks):
+        self.logger.info(f"Mixing {len(chunks)} chunks")
+        # Remove any tuples with only one element or non-audio data
+        try:
+            chunks = [chunk for chunk in chunks if len(chunk) > 1 and isinstance(chunk[1], numpy.ndarray)]
+            self.logger.info(f"Filtered {len(chunks)} chunks")
+        except Exception as e:
+            self.logger.info(f"FUCK TURD {e}")
+
+        # If there's only one chunk, return it
+        try:
+            if len(chunks) == 1:
+                return chunks[0][1]
+        except Exception as e:
+            self.logger.info(f"SHOOT {e}")
+        
+        # Mix all chunks
+        try:
+            combined_chunk = numpy.zeros_like(chunks[0][1])
+            for chunk in chunks:
+                # Mix each channel separately
+                for channel in range(combined_chunk.shape[1]):
+                    if isinstance(chunk[1], numpy.ndarray):
+                        combined_chunk[:, channel] += chunk[1][:, channel]
+            
+            combined_chunk = numpy.clip(combined_chunk, numpy.iinfo(numpy.int16).min, numpy.iinfo(numpy.int16).max)  # Avoid clipping
+
+            return combined_chunk
+        except Exception as e:
+            self.logger.info(f"ARSE CUNNY FARTS {e}")
 
     ## Opens the probing stream. This is the audio stream which is used to check the audio level when the sound settings page is open
     @catch_errors
@@ -444,6 +562,7 @@ class Plugin:
             await self.broadcast_update(self)
             users=[]
             self.connected = False
+            decky_plugin.logger.info(f"Killing callbacks")
             self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_SOUNDRECEIVED)
             self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELCREATED)
             self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_CHANNELUPDATED)
@@ -456,9 +575,17 @@ class Plugin:
             self.mumble.callbacks.reset_callback(pymumble.constants.PYMUMBLE_CLBK_ACLRECEIVED)
             self.mumble.remove_comment_update_callback()
             #await self.broadcast_update(self)
+            decky_plugin.logger.info(f"Stopping audio")
             self.stream.stop()
+            decky_plugin.logger.info(f"set stop event")
+            self.stop_audio_thread.set()
+            decky_plugin.logger.info(f"reset audio_queue")
+            #self.audio_queue = None
             self.audio_queue.put((None, None))
+            self.audio_event.set()
             self.playback_thread.join()
+            decky_plugin.logger.info(f"returning users")
+            decky_plugin.logger.info(f"Listing thread: {threading.enumerate()}")
             return users
         except Exception as e:
             decky_plugin.logger.info(f"fucked")
@@ -543,13 +670,32 @@ class Plugin:
     ## When sound is received, this function is called. It adds the sound to the queue for playback by the audio_playback_thread
     @catch_errors
     def sound_received_handler(self, user, soundchunk):
-        decky_plugin.logger.info(f"Sound received {user}")
+        decky_plugin.logger.info(f"Sound received {user['name']}")
         try:
             if not self.deafened and user['name'] not in self.muted_users:
                 asyncio.run(self.broadcast_update(self, username=user))
                 device_info = sd.query_devices(self.selected_output_device, 'output')
-                stereo_data = mono_to_stereo(soundchunk.pcm)
-                self.audio_queue.put((user['volume'], stereo_data))
+                #stereo_data = mono_to_stereo(soundchunk.pcm)
+                #stereo_data = soundchunk.pcm
+                stereo_data_array = numpy.frombuffer(soundchunk.pcm, dtype=numpy.int16)
+
+                try:
+                    if user['name'] not in self.user_audio_buffers:
+                        self.user_audio_buffers[user['name']] = stereo_data_array
+                        self.audio_event.set()
+                    else:
+                        if len(self.user_audio_buffers[user['name']]) > 0:
+
+                            self.user_audio_buffers[user['name']] = numpy.concatenate((self.user_audio_buffers[user['name']], stereo_data_array))
+                            self.audio_event.set()
+                        else:
+                            self.user_audio_buffers[user['name']] = stereo_data_array
+                            self.audio_event.set()
+                except Exception as e:
+                    decky_plugin.logger.error(f"Failed to write to audio buffer: {e}")
+                decky_plugin.logger.info(f"TERGIIS {self.audio_queue.qsize()}")
+                #decky_plugin.logger.info(f"putted {current_queue_data}")
+
         except Exception as e:
             decky_plugin.logger.error(f"Failed to handle sound received: {e}")
 
@@ -799,7 +945,7 @@ class Plugin:
     
     async def get_channels_and_users(self):
         channels_and_users = {}
-        decky_plugin.logger.info(f"Connected: {self.connected}")
+        #decky_plugin.logger.info(f"Connected: {self.connected}")
 
         if self.connected:
             for channel in self.mumble.channels:

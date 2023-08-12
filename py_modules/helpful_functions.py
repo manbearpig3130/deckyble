@@ -74,3 +74,46 @@ def catch_errors(func):
         except Exception as e:
             decky_plugin.logger.error(f"Error in {func.__name__}: {e}")
     return wrapper
+
+
+def phase_correlation(x, y):
+    # Compute the FFT of the audio data
+    X = numpy.fft.fft(x)
+    Y = numpy.fft.fft(y)
+
+    # Compute the cross-power spectrum
+    R = X * numpy.conj(Y)
+
+    # Compute the phase correlation function
+    r = numpy.fft.ifft(R / numpy.abs(R))
+
+    # Find the peak of the phase correlation function
+    peak = numpy.argmax(numpy.abs(r))
+
+    # Compute the phase difference between the two signals
+    phase_diff = numpy.angle(R[peak])
+
+    return phase_diff
+
+def limiter(x, threshold):
+    # Compute the maximum absolute value of the audio data
+    max_val = numpy.max(numpy.abs(x))
+
+    # If the maximum value exceeds the threshold, scale the audio data
+    if max_val > threshold:
+        x = x * threshold / max_val
+
+    return x
+
+
+def power_mixing(audio_data, vol):
+    # Compute the power of the audio data
+    power = numpy.mean(numpy.abs(audio_data) ** 2)
+
+    # Compute the scaling factor based on the power
+    scale = numpy.sqrt(1 / power)
+
+    # Scale the audio data based on the volume and power
+    audio_data = audio_data * vol * scale
+
+    return audio_data
